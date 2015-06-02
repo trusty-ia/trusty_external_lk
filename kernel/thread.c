@@ -274,6 +274,32 @@ static bool thread_is_real_time_or_idle(thread_t *t)
     return !!(t->flags & (THREAD_FLAG_REAL_TIME | THREAD_FLAG_IDLE));
 }
 
+static mp_cpu_mask_t thread_get_mp_reschedule_target(thread_t *current_thread, thread_t *t)
+{
+#if WITH_SMP
+    uint cpu = arch_curr_cpu_num();
+
+    if (t->pinned_cpu != -1 && current_thread->pinned_cpu == t->pinned_cpu)
+        return 0;
+
+    if (t->pinned_cpu != -1 && (uint)t->pinned_cpu != cpu) {
+        return 1UL << t->pinned_cpu;
+    }
+
+    if (current_thread->priority <= LOW_PRIORITY || t->priority <= LOW_PRIORITY)
+        return 0;
+
+    return MP_CPU_ALL_BUT_LOCAL;
+#else
+    return 0;
+#endif
+}
+
+static void thread_mp_reschedule(thread_t *current_thread, thread_t *t)
+{
+    mp_reschedule(thread_get_mp_reschedule_target(current_thread, t), 0);
+}
+
 /**
  * @brief  Make a suspended thread executable.
  *
@@ -299,7 +325,7 @@ status_t thread_resume(thread_t *t)
             resched = true;
     }
 
-    mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+    thread_mp_reschedule(get_current_thread(), t);
 
     THREAD_UNLOCK(state);
 
@@ -721,7 +747,7 @@ void thread_unblock(thread_t *t, bool resched)
 
     t->state = THREAD_READY;
     insert_in_run_queue_head(t);
-    mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+    thread_mp_reschedule(get_current_thread(), t);
     if (resched)
         thread_resched();
 }
@@ -1169,7 +1195,7 @@ int wait_queue_wake_one(wait_queue_t *wait, bool reschedule, status_t wait_queue
             insert_in_run_queue_head(current_thread);
         }
         insert_in_run_queue_head(t);
-        mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+        thread_mp_reschedule(current_thread, t);
         if (reschedule) {
             thread_resched();
         }
@@ -1199,6 +1225,7 @@ int wait_queue_wake_all(wait_queue_t *wait, bool reschedule, status_t wait_queue
 {
     thread_t *t;
     int ret = 0;
+    mp_cpu_mask_t mp_reschedule_target = 0;
 
     thread_t *current_thread = get_current_thread();
 
@@ -1224,13 +1251,14 @@ int wait_queue_wake_all(wait_queue_t *wait, bool reschedule, status_t wait_queue
         t->blocking_wait_queue = NULL;
 
         insert_in_run_queue_head(t);
+        mp_reschedule_target |= thread_get_mp_reschedule_target(current_thread, t);
         ret++;
     }
 
     DEBUG_ASSERT(wait->count == 0);
 
     if (ret > 0) {
-        mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+        mp_reschedule(mp_reschedule_target, 0);
         if (reschedule) {
             thread_resched();
         }
@@ -1285,7 +1313,7 @@ status_t thread_unblock_from_wait_queue(thread_t *t, status_t wait_queue_error)
     t->state = THREAD_READY;
     t->wait_queue_block_ret = wait_queue_error;
     insert_in_run_queue_head(t);
-    mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+    thread_mp_reschedule(get_current_thread(), t);
 
     return NO_ERROR;
 }
