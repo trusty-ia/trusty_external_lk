@@ -67,6 +67,9 @@ static uint32_t run_queue_bitmap;
 /* make sure the bitmap is large enough to cover our number of priorities */
 STATIC_ASSERT(NUM_PRIORITIES <= sizeof(run_queue_bitmap) * 8);
 
+/* Priority of current thread running on cpu, or last signalled */
+static int cpu_priority[SMP_MAX_CPUS];
+
 /* the idle thread(s) (statically allocated) */
 static thread_t idle_threads[SMP_MAX_CPUS];
 
@@ -253,18 +256,26 @@ static mp_cpu_mask_t thread_get_mp_reschedule_target(thread_t *current_thread, t
 {
 #if WITH_SMP
 	uint cpu = arch_curr_cpu_num();
+	uint target_cpu;
 
 	if (t->pinned_cpu != -1 && current_thread->pinned_cpu == t->pinned_cpu)
 		return 0;
 
-	if (t->pinned_cpu != -1 && (uint)t->pinned_cpu != cpu) {
-		return 1UL << t->pinned_cpu;
-	}
-
-	if (current_thread->priority <= LOW_PRIORITY || t->priority <= LOW_PRIORITY)
+	if (t->pinned_cpu == -1 || (uint)t->pinned_cpu == cpu)
 		return 0;
 
-	return MP_CPU_ALL_BUT_LOCAL;
+	target_cpu = (uint)t->pinned_cpu;
+
+	if (t->priority < cpu_priority[target_cpu])
+		return 0;
+
+#ifdef DEBUG_THREAD_CPU_WAKE
+	dprintf(ALWAYS, "%s: cpu %d, wake cpu %d, priority %d for priority %d thread (current priority %d)\n",
+		__func__, cpu, target_cpu, cpu_priority[target_cpu], t->priority, current_thread->priority);
+	cpu_priority[target_cpu] = t->priority;
+#endif
+
+	return 1UL << target_cpu;
 #else
 	return 0;
 #endif
@@ -453,7 +464,7 @@ static void idle_thread_routine(void)
 		arch_idle();
 }
 
-static thread_t *get_top_thread(int cpu)
+static thread_t *get_top_thread(int cpu, bool unlink)
 {
 	thread_t *newthread;
 	uint32_t local_run_queue_bitmap = run_queue_bitmap;
@@ -466,10 +477,12 @@ static thread_t *get_top_thread(int cpu)
 
 		list_for_every_entry(&run_queue[next_queue], newthread, thread_t, queue_node) {
 			if (newthread->pinned_cpu < 0 || newthread->pinned_cpu == cpu) {
-				list_delete(&newthread->queue_node);
+				if (unlink) {
+					list_delete(&newthread->queue_node);
 
-				if (list_is_empty(&run_queue[next_queue]))
-					run_queue_bitmap &= ~(1<<next_queue);
+					if (list_is_empty(&run_queue[next_queue]))
+						run_queue_bitmap &= ~(1<<next_queue);
+				}
 
 				return newthread;
 			}
@@ -479,6 +492,39 @@ static thread_t *get_top_thread(int cpu)
 	}
 	/* no threads to run, select the idle thread for this cpu */
 	return &idle_threads[cpu];
+}
+
+static void thread_cond_mp_reschedule(thread_t *current_thread, const char *caller)
+{
+	int i;
+	uint best_cpu = ~0U;
+	int best_cpu_priority = INT_MAX;
+	thread_t *t = get_top_thread(-1, false);
+
+	DEBUG_ASSERT(arch_ints_disabled());
+	DEBUG_ASSERT(spin_lock_held(&thread_lock));
+
+	for (i = 0; i < SMP_MAX_CPUS; i++) {
+		if (!(mp.active_cpus & (1 << i)))
+			continue;
+
+		if (cpu_priority[i] < best_cpu_priority) {
+			best_cpu = i;
+			best_cpu_priority = cpu_priority[i];
+		}
+	}
+
+	if (t->priority <= best_cpu_priority)
+		return;
+
+#ifdef DEBUG_THREAD_CPU_WAKE
+	dprintf(ALWAYS, "%s from %s: cpu %d, wake cpu %d, priority %d for priority %d thread (%s), current %d (%s)\n",
+		__func__, caller, arch_curr_cpu_num(), best_cpu, best_cpu_priority,
+		t->priority, t->name,
+		current_thread->priority, current_thread->name);
+#endif
+	cpu_priority[best_cpu] = t->priority;
+	mp_reschedule(1UL << best_cpu, 0);
 }
 
 /**
@@ -507,7 +553,7 @@ void thread_resched(void)
 
 	THREAD_STATS_INC(reschedules);
 
-	newthread = get_top_thread(cpu);
+	newthread = get_top_thread(cpu, true);
 
 #if THREAD_CHECKS
 	ASSERT(newthread);
@@ -557,6 +603,7 @@ void thread_resched(void)
 
 #if PLATFORM_HAS_DYNAMIC_TIMER
 	if (thread_is_real_time_or_idle(newthread)) {
+		thread_cond_mp_reschedule(newthread, __func__);
 		if (!thread_is_real_time_or_idle(oldthread)) {
 			/* if we're switching from a non real time to a real time, cancel
 			 * the preemption timer. */
@@ -581,6 +628,7 @@ void thread_resched(void)
 	target_set_debug_led(0, !thread_is_idle(&idle_threads[cpu]));
 
 	/* do the switch */
+	cpu_priority[cpu] = newthread->priority;
 	set_current_thread(newthread);
 
 #ifdef DEBUG_THREAD_CONTEXT_SWITCH
@@ -720,6 +768,13 @@ enum handler_return thread_timer_tick(void)
 {
 	thread_t *current_thread = get_current_thread();
 
+	if (thread_is_idle(current_thread))
+		return INT_NO_RESCHEDULE;
+
+	THREAD_LOCK(state);
+	thread_cond_mp_reschedule(current_thread, __func__);
+	THREAD_UNLOCK(state);
+
 	if (thread_is_real_time_or_idle(current_thread))
 		return INT_NO_RESCHEDULE;
 
@@ -812,6 +867,7 @@ void thread_init_early(void)
 	t->pinned_cpu = 0;
 	wait_queue_init(&t->retcode_wait_queue);
 	list_add_head(&thread_list, &t->thread_list_node);
+	cpu_priority[0] = t->priority;
 	set_current_thread(t);
 }
 
@@ -920,6 +976,7 @@ void thread_secondary_cpu_init_early(void)
 	THREAD_LOCK(state);
 
 	list_add_head(&thread_list, &t->thread_list_node);
+	cpu_priority[cpu] = t->priority;
 	set_current_thread(t);
 
 	THREAD_UNLOCK(state);
