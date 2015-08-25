@@ -33,12 +33,11 @@ SECTIONS
 		*(.gnu.linkonce.t.*)
 		__code_end = .;
 	} =0x9090
-
 	.rodata : ALIGN(4096) {
 		__rodata_start = .;
 		*(.rodata*)
 		*(.gnu.linkonce.r.*)
-INCLUDE "arch/x86-64/shared_rodata_sections.ld"
+INCLUDE "arch/shared_rodata_sections.ld"
 		. = ALIGN(8);
 		__rodata_end = .;
 	}
@@ -46,8 +45,14 @@ INCLUDE "arch/x86-64/shared_rodata_sections.ld"
 	.data : ALIGN(4096) {
 		__data_start = .;
 		*(.data .data.* .gnu.linkonce.d.*)
-INCLUDE "arch/x86-64/shared_data_sections.ld"
+INCLUDE "arch/shared_data_sections.ld"
 	}
+
+	.stack : ALIGN(4096){
+                __tss_start = .;
+                __tss_end = . + (4096);
+	 }
+
 	__ctor_list = .;
 	.ctors : { KEEP(*(.ctors)) }
 	__ctor_end = .;

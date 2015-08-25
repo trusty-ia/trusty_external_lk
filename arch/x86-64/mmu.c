@@ -59,7 +59,7 @@ static bool x86_mmu_check_map_addr(addr_t address)
 	return true;
 }
 
-static inline uint64_t get_pml4_entry_from_pml4_table(vaddr_t vaddr, addr_t pml4_addr)
+uint64_t get_pml4_entry_from_pml4_table(vaddr_t vaddr, addr_t pml4_addr)
 {
 	uint32_t pml4_index;
 	uint64_t *pml4_table = (uint64_t *)X86_PHYS_TO_VIRT(pml4_addr);
@@ -171,7 +171,7 @@ uint get_arch_mmu_flags(arch_flags_t flags)
  * 4KB pages.
  *
  */
-static status_t x86_mmu_get_mapping(addr_t pml4, vaddr_t vaddr, uint32_t *ret_level,
+status_t x86_mmu_get_mapping(addr_t pml4, vaddr_t vaddr, uint32_t *ret_level,
 				arch_flags_t *mmu_flags, map_addr_t *last_valid_entry)
 {
 	uint64_t pml4e, pdpe, pde, pte;
@@ -338,21 +338,40 @@ static addr_t *_map_alloc(size_t size)
  */
 addr_t *x86_create_new_cr3(void)
 {
-	map_addr_t *kernel_table, *new_table = NULL;
+	addr_t *kernel_first_level_table, *kernel_second_level_table;
+	addr_t *new_first_level_table = NULL;
+	addr_t *new_second_level_table = NULL;
+	arch_flags_t first_level_entry_flags = 0;
 
-	if(!g_CR3)
-		return 0;
+	ASSERT(g_CR3);
 
-	kernel_table = (map_addr_t *)X86_PHYS_TO_VIRT(g_CR3);
+	kernel_first_level_table = (addr_t *)X86_PHYS_TO_VIRT(g_CR3);
+	ASSERT(kernel_first_level_table);
+	kernel_second_level_table = (addr_t *)X86_PHYS_TO_VIRT(kernel_first_level_table[0] & X86_PG_FRAME);
+	ASSERT(kernel_second_level_table);
+	first_level_entry_flags = kernel_first_level_table[0] & X86_FLAGS_MASK;
 
 	/* Allocate a new Page to generate a new paging structure for a new CR3 */
-	new_table = _map_alloc(PAGE_SIZE);
-	ASSERT(new_table);
+	new_first_level_table = _map_alloc(PAGE_SIZE);
+	new_second_level_table = _map_alloc(PAGE_SIZE);
+	ASSERT(new_first_level_table);
+	ASSERT(new_second_level_table);
 
-	/* Copying the kernel mapping as-is */
-	memcpy(new_table, kernel_table, PAGE_SIZE);
+	/*
+         * Copying the first 2 entires of the 1st page in the second level page table
+         * in order to map 2 GB of kernel mappings
+         * Assumption: 0 to 2GB of virtual memory is assigned to the kernel
+         */
+	new_second_level_table[0] = kernel_second_level_table[0]; /* Copies 1st 1 GB of kernel mapping */
+	new_second_level_table[1] = kernel_second_level_table[1]; /* Copies 2nd 1 GB of kernel mapping */
 
-	return (addr_t)new_table;
+	/*
+         * Copy the address of newly created second level page table (pdp) which contains
+         * entries mapping the 2GB of kernel space above
+         */
+	new_first_level_table[0] = (uint64_t)new_second_level_table | first_level_entry_flags | X86_MMU_PG_U;
+
+	return new_first_level_table;
 }
 
 /**
@@ -602,7 +621,7 @@ status_t arch_mmu_query(vaddr_t vaddr, paddr_t *paddr, uint *flags)
 	arch_flags_t ret_flags;
 	status_t stat;
 
-	if(!paddr || !flags)
+	if(!paddr)
 		return ERR_INVALID_ARGS;
 
 	DEBUG_ASSERT(x86_get_cr3());

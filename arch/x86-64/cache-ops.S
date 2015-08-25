@@ -40,3 +40,5 @@ FUNCTION(arch_clean_cache_range)
 FUNCTION(arch_clean_invalidate_cache_range)
 	ret
 
+FUNCTION(arch_sync_cache_range)
+	ret

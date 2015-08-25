@@ -44,6 +44,7 @@
 .section ".text.boot"
 .code32
 .global _start
+.global _compact_code
 _start:
 	jmp real_start
 
@@ -148,14 +149,14 @@ farjump:
 	mov %eax, %cr3
 
 	/* Long Mode Enabled at this point*/
-	movl $MSR_EFER ,%ecx
+	movl $MSR_EFER, %ecx
 	rdmsr
-	orl $EFER_LME,%eax
+	orl $EFER_LME, %eax
 	wrmsr
 
 	/* Setting the First PML4E with a PDP table reference*/
-	xorl %eax,  %eax
-	movl $pdp,   %eax
+	xorl %eax, %eax
+	movl $pdp, %eax
 	orl  $0x7, %eax
 	movl %eax, (pml4)
 
@@ -172,21 +173,21 @@ farjump:
 fill_pte:
 	movl $0x1ff, %eax
 	subl %ecx, %eax
-	shll $21,%eax
+	shll $21, %eax
 	orl  $0x87, %eax
 	movl %eax, (%esi)
-	addl $8,%esi
+	addl $8, %esi
 	loop fill_pte
 
 	/* Enabling Paging and from this point we are in
 	32 bit compatibility mode*/
-	mov %cr0,  %eax
+	mov %cr0, %eax
 	btsl $(31), %eax
-	mov %eax,  %cr0
+	mov %eax, %cr0
 
 	/* Flushing TLB's */
-	mov %cr3,%eax
-	mov %eax,%cr3
+	mov %cr3, %eax
+	mov %eax, %cr3
 
 	/* Using another long jump to be on 64 bit mode
 	after this we will be on real 64 bit mode */
@@ -195,6 +196,9 @@ fill_pte:
 	movl $farjump64, %ecx
 	pushl %ecx
 	retf
+
+_compact_code:
+	jmp _compact_code
 
 .align 8
 .code64
@@ -338,15 +342,6 @@ _data_gde:
 	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
 
-.set videosel, . - _gdt
-_video_gde:
-	.short 0xffff			/* limit 15:00 */
-	.short 0x8000			/* base 15:00 */
-	.byte  0x0b			/* base 23:16 */
-	.byte  0b10010010		/* P(1) DPL(00) S(1) 0 E(0) W(1) A(0) */
-	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
-	.byte  0x0			/* base 31:24 */
-
 .set user_codesel_32, . - _gdt
 _user_code_32_gde:
 	.short 0xffff			/* limit 15:00 */
@@ -365,6 +360,11 @@ _user_data_32_gde:
 	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
 
+.set null_2, . - _gdt
+_null_2_gde:
+	.int 0
+	.int 0
+
 .set codesel_64, . - _gdt
 _code_64_gde:
 	.short 0xffff			/* limit 15:00 */
@@ -382,9 +382,24 @@ _data_64_gde:
 	.byte  0b10010010		/* P(1) DPL(00) S(1) 1 C(0) R(1) A(0) */
 	.byte  0b11001111		/* G(1) B(1) 0 AVL(0) limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-	
-	.quad  0x0000000000000000
-	.quad  0x0000000000000000
+
+.set user_codesel_compat, . - _gdt
+_user_code_compat_gde:
+	.short 0xffff			/* limit 15:00 */
+	.short 0x0000			/* base 15:00 */
+	.byte  0x00			/* base 23:16 */
+	.byte  0b11111010		/* P(1) DPL(00) S(1) 1 C(0) R(1) A(0) */
+	.byte  0b11001111		/* G(1) D(1) L(0) AVL(0) limit 19:16 */
+	.byte  0x0			/* base 31:24 */
+
+.set user_datasel_compat, . - _gdt
+_user_data_compat_gde:
+	.short 0xffff			/* limit 15:00 */
+	.short 0x0000			/* base 15:00 */
+	.byte  0x00			/* base 23:16 */
+	.byte  0b11110010		/* P(1) DPL(11) S(1) 0 E(0) W(1) A(0) */
+	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
+	.byte  0x0			/* base 31:24 */
 
 .set user_codesel_64, . - _gdt
 _user_code_64_gde:
@@ -392,9 +407,9 @@ _user_code_64_gde:
 	.short 0x0000			/* base 15:00 */
 	.byte  0x00			/* base 23:16 */
 	.byte  0b11111010		/* P(1) DPL(11) S(1) 1 C(0) R(1) A(0) */
-	.byte  0b10101111		/* G(1) D(1) L(0) AVL(0) limit 19:16 */
+	.byte  0b10101111		/* G(1) D(0) L(1) AVL(0) limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-	
+
 .set user_datasel_64, . - _gdt
 _user_data_64_gde:
 	.short 0xffff			/* limit 15:00 */
@@ -443,6 +458,14 @@ _idt:
 
 .set i, i + 1
 .endr
+
+/* syscall int (ring 3) */
+_idt30:
+	.short 0                /* low 16 bits of ISR offset (_isr#i & 0FFFFh) */
+	.short codesel_64       /* selector */
+	.byte  0
+	.byte  0xee             /* present, ring 3, 32-bit interrupt gate */
+	.short 0                /* high 16 bits of ISR offset (_isr#i / 65536) */
 
 .global _idt_end
 _idt_end:
