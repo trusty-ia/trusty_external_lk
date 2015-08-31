@@ -25,6 +25,7 @@
 #define __ARCH_X86_64_OPS_H
 
 #include <compiler.h>
+#include <stdbool.h>
 
 #ifndef ASSEMBLY
 
@@ -56,9 +57,19 @@ static inline inline bool arch_ints_disabled(void)
 	return !(state & (1<<9));
 }
 
+
+static inline void arch_enable_fiqs(void)
+{
+      CF;
+}
+
+static inline void arch_disable_fiqs(void)
+{
+      CF;
+}
+
 int _atomic_and(volatile int *ptr, int val);
 int _atomic_or(volatile int *ptr, int val);
-int _atomic_cmpxchg(volatile int *ptr, int oldval, int newval);
 
 static inline int atomic_add(volatile int *ptr, int val)
 {
@@ -87,7 +98,23 @@ static inline int atomic_swap(volatile int *ptr, int val)
 
 static inline int atomic_and(volatile int *ptr, int val) { return _atomic_and(ptr, val); }
 static inline int atomic_or(volatile int *ptr, int val) { return _atomic_or(ptr, val); }
-static inline int atomic_cmpxchg(volatile int *ptr, int oldval, int newval) { return _atomic_cmpxchg(ptr, oldval, newval); }
+
+static inline int atomic_cmpxchg(volatile int *ptr, int oldval, uint64_t newval)
+{
+#if USE_GCC_ATOMICS
+	__atomic_compare_exchange_n(ptr, &oldval, newval, false,
+                  __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+
+#else
+	__asm__ volatile(
+		"lock cmpxchgq  %[newval], %[ptr];"
+		: "=a" (oldval),  "=m" (*ptr)
+		: "a" (oldval), [newval]"r" (newval), [ptr]"m" (*ptr)
+		: "memory"
+	);
+#endif
+	return oldval;
+}
 
 static inline uint32_t arch_cycle_count(void)
 {
@@ -114,6 +141,21 @@ static inline uint arch_curr_cpu_num(void)
 {
 	    return 0;
 }
+
+
+#define mb()        CF
+#define wmb()       CF
+#define rmb()       CF
+
+#ifdef WITH_SMP
+#define smp_mb()    CF
+#define smp_wmb()   CF
+#define smp_rmb()   CF
+#else
+#define smp_mb()    CF
+#define smp_wmb()   CF
+#define smp_rmb()   CF
+#endif
 
 #endif // !ASSEMBLY
 

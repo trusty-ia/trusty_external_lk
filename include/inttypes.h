@@ -25,6 +25,7 @@
 
 #define PRIu32 "u"
 #define PRIx32 "x"
+#define PRIi64 "lli"
 
 #include <stdint.h>
 

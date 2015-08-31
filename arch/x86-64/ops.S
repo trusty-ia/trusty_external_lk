@@ -74,3 +74,29 @@ FUNCTION(arch_idle)
 1:
 	ret
 
+/* int arch_spin_trylock(spin_lock_t *lock); */
+FUNCTION(arch_spin_trylock)
+   mov $0, %rax
+   mov $1, %rdx
+   lock cmpxchgq %rdx, (%rdi)
+   ret
+
+/* void arch_spin_lock(spin_lock_t *lock); */
+FUNCTION(arch_spin_lock)
+1:
+   mov $0, %rax
+   mov $1, %rdx
+   lock cmpxchgq %rdx, (%rdi)
+   jnz 2f
+   ret
+2:
+   pause
+   cmp $0,(%rdi)
+   je 1b
+   jmp 2b
+
+/* void arch_spin_unlock(spin_lock_t *lock); */
+FUNCTION(arch_spin_unlock)
+   movl  $0, (%rdi)
+   ret
+
