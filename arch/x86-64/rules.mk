@@ -14,6 +14,8 @@ GLOBAL_DEFINES += \
 GLOBAL_DEFINES += \
 	SMP_MAX_CPUS=1 \
 
+GLOBAL_DEFINES += \
+	ENABLE_FPU \
 
 KERNEL_BASE ?= 0x00000000
 KERNEL_LOAD_OFFSET ?= 0x200000
@@ -28,7 +30,8 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/thread.c \
 	$(LOCAL_DIR)/mmu.c \
 	$(LOCAL_DIR)/faults.c \
-	$(LOCAL_DIR)/descriptor.c
+	$(LOCAL_DIR)/descriptor.c \
+	$(LOCAL_DIR)/fpu.c
 
 # set the default toolchain to x86 elf and set a #define
 ifndef TOOLCHAIN_PREFIX
