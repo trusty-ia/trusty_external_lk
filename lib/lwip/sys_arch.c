@@ -20,7 +20,8 @@ static int sys_thread_func(void *arg)
 	struct sys_thread *st = arg;
 	DEBUG_ASSERT(st);
 
-	tls_set(0, (uint32_t) st);
+    /* TODO: need to take it from the platform later */
+    tls_set(1, (uint32_t) st);
 
 	st->func(st->arg);
 

@@ -1,5 +1,5 @@
 /* should be included in all lk linker scripts in the .rodata segment */
-. = ALIGN(4);
+. = ALIGN(8);
 __lk_init = .;
 KEEP(*(.lk_init))
 __lk_init_end = .;

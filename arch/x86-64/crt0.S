@@ -41,6 +41,10 @@
 #define MSR_EFER 0xc0000080
 #define EFER_LME 0x00000100
 
+/* PAT MSR id & value to be set */
+#define PAT_MSR 0x277
+#define CACHE_MODE 0x70106
+
 .section ".text.boot"
 .code32
 .global _start
@@ -76,6 +80,14 @@ real_start:
 	jne 0f
 	movl %ebx, (_multiboot_info)
 0:
+    /* Setting the PAT MSRs */
+    xorl %eax, %eax
+    xorl %ecx, %ecx
+    xorl %edx, %edx
+    movl $PAT_MSR, %ecx
+    movl $CACHE_MODE, %eax  /* cacheability modes supported - WB, WC, UC, UC- */
+    wrmsr
+
 	/* setup isr stub descriptors in the idt */
 	movl $_isr, %esi
 	movl $_idt, %edi

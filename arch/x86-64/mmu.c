@@ -127,14 +127,25 @@ arch_flags_t get_x86_arch_flags(arch_flags_t flags)
 {
 	arch_flags_t arch_flags = 0;
 
+    switch (flags & ARCH_MMU_FLAG_CACHE_MASK) {
+        case ARCH_MMU_FLAG_CACHED:
+            /* enabling write-back mode */
+            arch_flags |= X86_MMU_PG_PTE_PAT | X86_MMU_PG_PCD;
+        break;
+        case ARCH_MMU_FLAG_UNCACHED:
+            arch_flags |= X86_MMU_CACHE_DISABLE;
+        break;
+        default:
+        /* invalid cache option - can't be both cached & uncached */
+        break;
+    }
+
+
 	if(!(flags & ARCH_MMU_FLAG_PERM_RO))
 		arch_flags |= X86_MMU_PG_RW;
 
 	if(flags & ARCH_MMU_FLAG_PERM_USER)
 		arch_flags |= X86_MMU_PG_U;
-
-	if(flags & ARCH_MMU_FLAG_UNCACHED)
-		arch_flags |= X86_MMU_CACHE_DISABLE;
 
 	if(flags & ARCH_MMU_FLAG_PERM_NO_EXECUTE)
 		arch_flags |= X86_MMU_PG_NX;
@@ -157,6 +168,9 @@ uint get_arch_mmu_flags(arch_flags_t flags)
 
 	if(flags & X86_MMU_CACHE_DISABLE)
 		mmu_flags |= ARCH_MMU_FLAG_UNCACHED;
+
+    if(flags & (X86_MMU_PG_PTE_PAT | X86_MMU_PG_PCD))
+        mmu_flags |= ARCH_MMU_FLAG_CACHED;
 
 	if(flags & X86_MMU_PG_NX)
 		mmu_flags |= ARCH_MMU_FLAG_PERM_NO_EXECUTE;

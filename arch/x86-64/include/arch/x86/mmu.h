@@ -31,6 +31,8 @@ void x86_mmu_init(void);
 
 #define X86_MMU_PG_P		0x001		/* P    Valid			*/
 #define X86_MMU_PG_RW		0x002		/* R/W  Read/Write		*/
+#define X86_MMU_PG_PWT		0x008		/* PWT  cache bit		*/
+#define X86_MMU_PG_PCD		0x010		/* PCD  cache bit		*/
 #define X86_MMU_PG_U		0x004		/* U/S  User/Supervisor		*/
 #define X86_MMU_PG_PS		0x080		/* PS   Page size (0=4k,1=2M)	*/
 #define X86_MMU_PG_PTE_PAT	0x080		/* PAT  PAT index		*/
