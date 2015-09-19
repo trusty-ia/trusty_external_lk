@@ -78,7 +78,7 @@ vm_page_t *address_to_page(paddr_t addr)
 
 status_t pmm_add_arena(pmm_arena_t *arena)
 {
-    LTRACEF("arena %p name '%s' base 0x%lx size 0x%x\n", arena, arena->name, arena->base, arena->size);
+    LTRACEF("arena %p name '%s' base 0x%lx size 0x%zx\n", arena, arena->name, arena->base, arena->size);
 
     DEBUG_ASSERT(IS_PAGE_ALIGNED(arena->base));
     DEBUG_ASSERT(IS_PAGE_ALIGNED(arena->size));
@@ -348,7 +348,7 @@ static void dump_page(const vm_page_t *page)
 
 static void dump_arena(const pmm_arena_t *arena, bool dump_pages)
 {
-    printf("arena %p: name '%s' base 0x%lx size 0x%x priority %u flags 0x%x\n",
+    printf("arena %p: name '%s' base 0x%lx size 0x%zx priority %u flags 0x%x\n",
            arena, arena->name, arena->base, arena->size, arena->priority, arena->flags);
     printf("\tpage_array %p, free_count %zu\n",
            arena->page_array, arena->free_count);
