@@ -35,7 +35,7 @@
 /* The magic number passed by a Multiboot-compliant boot loader. */
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 
-#define NUM_INT 0x31
+#define NUM_INT 0x100
 #define NUM_EXC 0x14
 
 #define MSR_EFER 0xc0000080
@@ -232,13 +232,23 @@ _isr:
 .set isr_stub_start, .
 
 .if i == 8 || (i >= 10 && i <= 14) || i == 17
-        nop                                             /* error code pushed by exception */
-        nop                                             /* 2 nops are the same length as push byte */
-        pushq $i                                /* interrupt number */
+        nop            /* error code pushed by exception */
+        nop            /* 2 nops are the same length as push byte */
+        pushq $i       /* interrupt number */
+.if i < 0x80
+        nop            /* i>=0x80, pushq $i occupies 5 bytes compare to 2 bytes if i<0x80 */
+        nop            /* need to add 3 nops to fill the gap */
+        nop            /* to make sure isr_stub_len correct for each intr */
+.endif
         jmp interrupt_common
 .else
-        pushq $0                                /* fill in error code in iframe */
-        pushq $i                                /* interrupt number */
+        pushq $0       /* fill in error code in iframe */
+        pushq $i       /* interrupt number */
+.if i < 0x80
+        nop            /* i>=0x80, pushq $i occupies 5 bytes compare to 2 bytes if i<0x80*/
+        nop            /* need to add 3 nops to fill the gap */
+        nop            /* to make sure isr_stub_len correct for each intr */
+.endif
         jmp interrupt_common
 .endif
 
