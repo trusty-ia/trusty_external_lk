@@ -52,7 +52,9 @@ struct lk_init_struct {
     const char *name;
 };
 
-#ifdef ARCH_X86_64
+#if MODULE_STATIC_LIB
+#define LK_INIT_HOOK_FLAGS(a,b,c,d) _Pragma("GCC error \"init hooks are not fully compatible with static libraries\"")
+#elif defined(ARCH_X86_64)
 #define LK_INIT_HOOK_FLAGS(_name, _hook, _level, _flags) \
     const struct lk_init_struct _init_struct_##_name __ALIGNED(8) __SECTION(".lk_init") = { \
         .level = _level, \

@@ -20,7 +20,7 @@ $(OUTELF).hex: $(OUTELF)
 $(OUTELF): $(ALLMODULE_OBJS) $(EXTRA_OBJS) $(LINKER_SCRIPT)
 	@echo linking $@
 	$(NOECHO)$(SIZE) -t --common $(sort $(ALLMODULE_OBJS))
-	$(NOECHO)$(LD) $(GLOBAL_LDFLAGS) -T $(LINKER_SCRIPT) $(ALLMODULE_OBJS) $(EXTRA_OBJS) $(LIBGCC) -o $@
+	$(NOECHO)$(LD) $(GLOBAL_LDFLAGS) -T $(LINKER_SCRIPT)  --start-group $(ALLMODULE_OBJS) $(EXTRA_OBJS) --end-group $(LIBGCC) -o $@
 
 $(OUTELF).sym: $(OUTELF)
 	@echo generating symbols: $@
