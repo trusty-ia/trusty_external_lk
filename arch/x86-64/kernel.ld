@@ -37,15 +37,13 @@ SECTIONS
 		__rodata_start = .;
 		*(.rodata*)
 		*(.gnu.linkonce.r.*)
-INCLUDE "arch/shared_rodata_sections.ld"
 		. = ALIGN(8);
-		__rodata_end = .;
 	}
 
 	.data : ALIGN(4096) {
+		__rodata_end = .;
 		__data_start = .;
 		*(.data .data.* .gnu.linkonce.d.*)
-INCLUDE "arch/shared_data_sections.ld"
 	}
 
 	.stack : ALIGN(4096){
@@ -53,19 +51,23 @@ INCLUDE "arch/shared_data_sections.ld"
                 __tss_end = . + (4096);
 	 }
 
-	__ctor_list = .;
-	.ctors : { KEEP(*(.ctors)) }
-	__ctor_end = .;
-	__dtor_list = .;
-	.dtors : { KEEP(*(.dtors)) }
-	__dtor_end = .;
+	.ctors : ALIGN(4) {
+		__ctor_list = .;
+		KEEP(*(.ctors .init_array))
+		__ctor_end = .;
+	}
+	.dtors : ALIGN(4) {
+		__dtor_list = .;
+		KEEP(*(.dtors .fini_array))
+		__dtor_end = .;
+	}
 
 	.stab   : { *(.stab) }
 	.stabst : { *(.stabstr) }
 
-	__data_end = .;
-
 	.bss : ALIGN(4096) {
+		__data_end = .;
+
 		__bss_start = .;
 		*(.bss*)
 		*(.gnu.linkonce.b.*)
