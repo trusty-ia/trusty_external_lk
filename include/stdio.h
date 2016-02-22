@@ -68,7 +68,7 @@ int puts(const char *str);
 int getc(FILE *fp);
 int getchar(void);
 
-int fprintf(FILE *fp, const char *fmt, ...);
+int fprintf(FILE *fp, const char *fmt, ...) __PRINTFLIKE(2, 3);
 int vfprintf(FILE *fp, const char *fmt, va_list ap);
 
 __END_CDECLS
