@@ -98,6 +98,9 @@ void arch_context_switch(thread_t *oldthread, thread_t *newthread)
 	fpu_context_switch(oldthread, newthread);
 #endif
 
+	//memory barrier operation in case thread moves to other cpu
+	smp_mb();
+
 	/* save the old context and restore the new */
 	__asm__ __volatile__ (
 		"pushq $1f			\n\t"

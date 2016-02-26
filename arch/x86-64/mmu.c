@@ -679,7 +679,7 @@ int arch_mmu_map(vaddr_t vaddr, paddr_t paddr, uint count, uint flags)
  * @brief  x86-64 MMU basic initialization
  *
  */
-void arch_mmu_init(void)
+void arch_mmu_init_percpu(void)
 {
 	volatile uint64_t efer_msr, cr0, cr4;
 

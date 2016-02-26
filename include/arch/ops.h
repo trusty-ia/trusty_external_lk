@@ -40,8 +40,8 @@ static bool arch_in_int_handler(void);
 
 static int atomic_swap(volatile int *ptr, int val);
 static int atomic_add(volatile int *ptr, int val);
-static int atomic_and(volatile int *ptr, int val);
-static int atomic_or(volatile int *ptr, int val);
+static int atomic_and(volatile int *ptr, long val);
+static int atomic_or(volatile int *ptr, long val);
 
 static uint32_t arch_cycle_count(void);
 

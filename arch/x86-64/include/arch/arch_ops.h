@@ -95,9 +95,8 @@ static inline int atomic_swap(volatile int *ptr, int val)
 	return val;
 }
 
-
-static inline int atomic_and(volatile int *ptr, int val) { return _atomic_and(ptr, val); }
-static inline int atomic_or(volatile int *ptr, int val) { return _atomic_or(ptr, val); }
+static inline int atomic_and(volatile int *ptr, long val) { return _atomic_and(ptr, val); }
+static inline int atomic_or(volatile int *ptr, long val) { return _atomic_or(ptr, val); }
 
 static inline int atomic_cmpxchg(volatile int *ptr, int oldval, uint64_t newval)
 {

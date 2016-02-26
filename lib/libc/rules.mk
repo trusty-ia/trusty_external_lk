@@ -11,8 +11,9 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/rand.c \
 	$(LOCAL_DIR)/stdio.c \
 	$(LOCAL_DIR)/qsort.c \
-	$(LOCAL_DIR)/eabi.c \
-	$(LOCAL_DIR)/new.cpp
+	$(LOCAL_DIR)/eabi.c
+#enable it will duplicate with lib/lib/libstdc++trusty/new.cpp
+#	$(LOCAL_DIR)/new.cpp
 
 ifneq ($(WITH_CUSTOM_MALLOC),true)
 MODULE_SRCS += $(LOCAL_DIR)/malloc.c
