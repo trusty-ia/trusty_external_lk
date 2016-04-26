@@ -27,6 +27,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* ENABLE_LK is defined only when compiling secvm.a with Intel compiler. */
+#ifndef ENABLE_LK
 typedef unsigned char uchar;
 typedef unsigned short ushort;
 typedef unsigned int uint;
@@ -35,6 +37,7 @@ typedef unsigned char u_char;
 typedef unsigned short u_short;
 typedef unsigned int u_int;
 typedef unsigned long u_long;
+#endif
 
 typedef long long     off_t;
 
@@ -62,6 +65,7 @@ enum handler_return {
 
 typedef signed long int ssize_t;
 
+#ifndef ENABLE_LK
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -76,5 +80,6 @@ typedef uint8_t u_int8_t;
 typedef uint16_t u_int16_t;
 typedef uint32_t u_int32_t;
 typedef uint64_t u_int64_t;
+#endif
 
 #endif

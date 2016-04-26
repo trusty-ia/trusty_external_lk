@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006 Travis Geiselbrecht
+ * Copyright (c) 2015 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,36 +20,58 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <new.h>
-#include <debug.h>
+#pragma once
 
-extern "C" {
-	void *heap_alloc(size_t, unsigned int alignment);
-	void heap_free(void *);
+#include <arch/ops.h>
+#include <arch/x86.h>
+#include <stdbool.h>
+
+#define SPIN_LOCK_INITIAL_VALUE (0)
+
+typedef unsigned long spin_lock_t;
+
+typedef uint64_t spin_lock_saved_state_t;
+typedef uint spin_lock_save_flags_t;
+
+/* simple implementation of spinlocks for no smp support */
+static inline void arch_spin_lock_init(spin_lock_t *lock)
+{
+    *lock = SPIN_LOCK_INITIAL_VALUE;
 }
 
-void *operator new(size_t s)
+static inline bool arch_spin_lock_held(spin_lock_t *lock)
 {
-	return heap_alloc(s, 0);
+    return *lock != 0;
 }
 
-void *operator new[](size_t s)
+static inline void arch_spin_lock(spin_lock_t *lock)
 {
-	return heap_alloc(s, 0);
+    *lock = 1;
 }
 
-void *operator new(size_t , void *p)
+static inline int arch_spin_trylock(spin_lock_t *lock)
 {
-	return p;
+    return 0;
 }
 
-void operator delete(void *p)
+static inline void arch_spin_unlock(spin_lock_t *lock)
 {
-	return heap_free(p);
+    *lock = 0;
 }
 
-void operator delete[](void *p)
+/* flags are unused on x86 */
+#define ARCH_DEFAULT_SPIN_LOCK_FLAG_INTERRUPTS  0
+
+static inline void
+arch_interrupt_save(spin_lock_saved_state_t *statep, spin_lock_save_flags_t flags)
 {
-	return heap_free(p);
+    *statep = x86_save_rflags();
+    arch_disable_ints();
+}
+
+static inline void
+arch_interrupt_restore(spin_lock_saved_state_t old_state, spin_lock_save_flags_t flags)
+{
+    x86_restore_rflags(old_state);
 }
 

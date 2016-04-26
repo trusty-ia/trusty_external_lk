@@ -530,6 +530,8 @@ MAX_RELEASE_CHECK_RATE   default: 4095 unless not HAVE_MMAP
 #define DLMALLOC_EXPORT extern
 #endif
 
+#define ONLY_MSPACES 1
+
 /* LK specific stuff here */
 #if defined(LK)
 #define USE_DL_PREFIX 1
@@ -540,7 +542,7 @@ MAX_RELEASE_CHECK_RATE   default: 4095 unless not HAVE_MMAP
 #define LACKS_SYS_PARAM_H
 #define LACKS_SCHED_H
 #define HAVE_MMAP 0
-#define HAVE_MORECORE 1
+#define HAVE_MORECORE 0
 #define USE_LOCKS 2
 #include <debug.h>
 #define ABORT panic("dlmalloc abort\n")

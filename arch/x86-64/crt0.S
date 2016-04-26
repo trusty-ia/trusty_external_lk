@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009 Corey Tabaka
- * Copyright (c) 2014 Intel Corporation 
+ * Copyright (c) 2015 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -79,31 +79,31 @@ real_start:
 	movl $_isr, %esi
 	movl $_idt, %edi
 	movl $NUM_INT, %ecx
-	
+
 .Lloop:
 	movl %esi, %ebx
 	movw %bx, (%edi)		/* low word in IDT(n).low */
 	shrl $16, %ebx
 	movw %bx, 6(%edi)		/* high word in IDT(n).high */
 	shrl $16, %ebx
-	movl $0, %ebx 
+	movl $0, %ebx
 	movl %ebx, 8(%edi)
 	shrl $16, %ebx
 	movl %ebx, 12(%edi)
 	shrl $16, %ebx
-	
+
 	addl $isr_stub_len, %esi	/* index the next ISR stub */
 	addl $16, %edi			/* index the next IDT entry */
-		
-	
+
 	loop .Lloop
+
 
 	lidt _idtr
 	xorl %eax, %eax
 	mov %eax, %cr3
 
 	lgdt _gdtr
-		
+
 	movw $datasel, %ax
 	movw %ax, %ds
 	movw %ax, %es
@@ -111,12 +111,12 @@ real_start:
 	movw %ax, %ss
 	movw %ax, %gs
 	movw %ax, %ss
-	
+
 	movl $_kstack, %esp
 
  	/* We need to jump to our sane 32 bit  CS
 	 executing a far jump using retf */
-	movl $codesel_32, %ecx   
+	movl $codesel_32, %ecx
         pushl %ecx
         movl $farjump, %ecx
         pushl %ecx
@@ -124,9 +124,8 @@ real_start:
         retf
 
 farjump:
-	movl $tsssel, %eax 
+	movl $tsssel, %eax
 	ltr %ax
-	
 	/* zero the bss section */
 	movl $__bss_start, %edi	/* starting address of the bss */
 	movl $__bss_end, %ecx	/* find the length of the bss in bytes */
@@ -137,65 +136,63 @@ farjump:
 	addl $4, %edi
 	loop 2b
 
-
-	 
-        /* Preparing 64 bit paging, we will use 2MB pages covering 1GB
-	   for initial bootstrap, this page table will be 1 to 1  */
+	/* Preparing 64 bit paging, we will use 2MB pages covering 1GB
+	for initial bootstrap, this page table will be 1 to 1  */
 
 	/* PAE bit must be enabled  for 64 bit paging*/
 	mov %cr4, %eax
 	btsl $(5), %eax
 	mov %eax, %cr4  /*Enabling PAE*/
-	
+
 	movl $pml4, %eax
 	mov %eax, %cr3
 
 	/* Long Mode Enabled at this point*/
 	movl $MSR_EFER ,%ecx
-        rdmsr
-        orl $EFER_LME,%eax
-        wrmsr
- 
-        /* Setting the First PML4E with a PDP table reference*/
-        xorl %eax,  %eax
+	rdmsr
+	orl $EFER_LME,%eax
+	wrmsr
+
+	/* Setting the First PML4E with a PDP table reference*/
+	xorl %eax,  %eax
 	movl $pdp,   %eax
-        orl  $0x3, %eax
-        movl %eax, (pml4)
- 
-        /* Setting the First PDPTE with a Page table reference*/
-        xorl %eax, %eax
-        movl $pte, %eax
-        orl  $0x03, %eax
-        movl %eax, (pdp)
- 
-        movl $pte, %esi
-        movl $0x1ff, %ecx
+	orl  $0x7, %eax
+	movl %eax, (pml4)
 
-	/* We need 256 entries of 2MB each to cover 1GB */ 
+	/* Setting the First PDPTE with a Page table reference*/
+	xorl %eax, %eax
+	movl $pte, %eax
+	orl  $0x7, %eax
+	movl %eax, (pdp)
+
+	movl $pte, %esi
+	movl $0x1ff, %ecx
+
+	/* We need 256 entries of 2MB each to cover 1GB */
 fill_pte:
-        movl $0x1ff, %eax
-        subl %ecx, %eax
-        shll $21,%eax
-        orl  $0x83, %eax
+	movl $0x1ff, %eax
+	subl %ecx, %eax
+	shll $21,%eax
+	orl  $0x87, %eax
 	movl %eax, (%esi)
-        addl $8,%esi
-        loop fill_pte
+	addl $8,%esi
+	loop fill_pte
 
-        /* Enabling Paging and from this point we are in 
-	   32 bit compatibility mode*/
-        mov %cr0,  %eax
-        btsl $(31), %eax
-        mov %eax,  %cr0
+	/* Enabling Paging and from this point we are in
+	32 bit compatibility mode*/
+	mov %cr0,  %eax
+	btsl $(31), %eax
+	mov %eax,  %cr0
 
 	/* Flushing TLB's */
 	mov %cr3,%eax
 	mov %eax,%cr3
 
 	/* Using another long jump to be on 64 bit mode
-	   after this we will be on real 64 bit mode */
+	after this we will be on real 64 bit mode */
 	movl $codesel_64, %ecx     /*Need to put it in a the right CS*/
-        pushl %ecx
-        movl $farjump64, %ecx
+	pushl %ecx
+	movl $farjump64, %ecx
 	pushl %ecx
 	retf
 
@@ -205,14 +202,14 @@ farjump64:
 	lidt _idtr
 	/* call the main module */
 	call lk_main
-	
+
 0:							/* just sit around waiting for interrupts */
 	hlt						/* interrupts will unhalt the processor */
 	pause
 	jmp 0b					/* so jump back to halt to conserve power */
 
 /* interrupt service routine stubs */
-_isr: 
+_isr:
 .set i, 0
 .rept NUM_INT
 
@@ -257,24 +254,20 @@ interrupt_common:
 	pushq %rsi
 	pushq %rdi
 
-	/* store stack switch pivot. 
+	/* store stack switch pivot.
            push rsp has errata on some cpus, so use mov/push */
 	movq %rsp, %rax
 	pushq %rax
 	movq %rsp, %rdi		/* pass the  iframe using rdi */
-	
-	incl critical_section_count
 
 	call platform_irq
-	
+
 	cmpq $0,%rax
 	je 0f
 	call thread_preempt
 
 0:
-	decl critical_section_count
-
-	/* restore task_rsp, stack switch can occur here 
+	/* restore task_rsp, stack switch can occur here
            if task_rsp is modified */
 	popq %rax
 	movq %rax, %rsp
@@ -303,6 +296,15 @@ interrupt_common:
 .data
 .align 8
 
+/* define the heap end as read-write data containing the default end of the
+ * heap. dynamic memory length discovery can update this value during init.
+ * other archs can define this statically based on the memory layout of the
+ * platform.
+ */
+#.global _heap_end
+#_heap_end:
+#	.int 4096*1024	/* default to 4MB total */
+
 .global _multiboot_info
 _multiboot_info:
 	.int 0
@@ -315,9 +317,8 @@ _gdtr:
 .align 8
 .global _gdt
 _gdt:
-	.int 0
-	.int 0
-
+	.int 0			   	/* NULL Descriptor_L*/
+	.int 0				/* NULL Descriptor_H */
 /* ring 0 descriptors */
 .set codesel_32, . - _gdt
 _code_32_gde:
@@ -327,16 +328,7 @@ _code_32_gde:
 	.byte  0b10011010		/* P(1) DPL(00) S(1) 1 C(0) R(1) A(0) */
 	.byte  0b11001111		/* G(1) D(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-	
-.set codesel_64, . - _gdt
-_code_64_gde:
-	.short 0x0000			/* limit 15:00 */
-	.short 0x0000			/* base 15:00 */
-	.byte  0x00			/* base 23:16 */
-	.byte  0b10011010		/* P(1) DPL(00) S(1) 1 C(0) R(1) A(0) */
-	.byte  0b10100000		/* G(1) D(0) L(1) AVL(0) limit 19:16 */
-	.byte  0x0			/* base 31:24 */
-	
+
 .set datasel, . - _gdt
 _data_gde:
 	.short 0xffff			/* limit 15:00 */
@@ -345,7 +337,7 @@ _data_gde:
 	.byte  0b10010010		/* P(1) DPL(00) S(1) 0 E(0) W(1) A(0) */
 	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-	
+
 .set videosel, . - _gdt
 _video_gde:
 	.short 0xffff			/* limit 15:00 */
@@ -354,9 +346,7 @@ _video_gde:
 	.byte  0b10010010		/* P(1) DPL(00) S(1) 0 E(0) W(1) A(0) */
 	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-	
-.if 1
-/* ring 3 descriptors */
+
 .set user_codesel_32, . - _gdt
 _user_code_32_gde:
 	.short 0xffff			/* limit 15:00 */
@@ -365,28 +355,56 @@ _user_code_32_gde:
 	.byte  0b11111010		/* P(1) DPL(11) S(1) 1 C(0) R(1) A(0) */
 	.byte  0b11001111		/* G(1) D(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-	
-.set user_codesel_64, . - _gdt
-_user_code_64_gde:
-	.short 0x0000			/* limit 15:00 */
-	.short 0x0000			/* base 15:00 */
-	.byte  0x00			/* base 23:16 */
-	.byte  0b11111010		/* P(1) DPL(11) S(1) 1 C(0) R(1) A(0) */
-	.byte  0b10100000		/* G(1) D(1) L(0) AVL(0) limit 19:16 */
-	.byte  0x0			/* base 31:24 */
-	
+
 .set user_datasel, . - _gdt
-_user_data_gde:
+_user_data_32_gde:
 	.short 0xffff			/* limit 15:00 */
 	.short 0x0000			/* base 15:00 */
 	.byte  0x00			/* base 23:16 */
 	.byte  0b11110010		/* P(1) DPL(11) S(1) 0 E(0) W(1) A(0) */
 	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
 	.byte  0x0			/* base 31:24 */
-.endif
+
+.set codesel_64, . - _gdt
+_code_64_gde:
+	.short 0xffff			/* limit 15:00 */
+	.short 0x0000			/* base 15:00 */
+	.byte  0x00			/* base 23:16 */
+	.byte  0b10011010		/* P(1) DPL(00) S(1) 1 C(0) R(1) A(0) */
+	.byte  0b10101111		/* G(1) D(0) L(1) AVL(0) limit 19:16 */
+	.byte  0x0			/* base 31:24 */
+
+.set datasel_64, . - _gdt
+_data_64_gde:
+	.short 0xffff			/* limit 15:00 */
+	.short 0x0000			/* base 15:00 */
+	.byte  0x00			/* base 23:16 */
+	.byte  0b10010010		/* P(1) DPL(00) S(1) 1 C(0) R(1) A(0) */
+	.byte  0b11001111		/* G(1) B(1) 0 AVL(0) limit 19:16 */
+	.byte  0x0			/* base 31:24 */
+	
+	.quad  0x0000000000000000
+	.quad  0x0000000000000000
+
+.set user_codesel_64, . - _gdt
+_user_code_64_gde:
+	.short 0xffff			/* limit 15:00 */
+	.short 0x0000			/* base 15:00 */
+	.byte  0x00			/* base 23:16 */
+	.byte  0b11111010		/* P(1) DPL(11) S(1) 1 C(0) R(1) A(0) */
+	.byte  0b10101111		/* G(1) D(1) L(0) AVL(0) limit 19:16 */
+	.byte  0x0			/* base 31:24 */
+	
+.set user_datasel_64, . - _gdt
+_user_data_64_gde:
+	.short 0xffff			/* limit 15:00 */
+	.short 0x0000			/* base 15:00 */
+	.byte  0x00			/* base 23:16 */
+	.byte  0b11110010		/* P(1) DPL(11) S(1) 0 E(0) W(1) A(0) */
+	.byte  0b11001111		/* G(1) B(1) 0 0 limit 19:16 */
+	.byte  0x0			/* base 31:24 */
 
 /* TSS descriptor */
-.if 1
 .set tsssel, . - _gdt
 _tss_gde:
 	.short 0				/* limit 15:00 */
@@ -396,8 +414,6 @@ _tss_gde:
 	.byte  0x80				/* G(0) 0 0 AVL(0) limit 19:16 */
 	.byte  0				/* base 31:24 */
 	.quad 0x0000000000000000
-.endif
-
 .global _gdt_end
 _gdt_end:
 
@@ -424,23 +440,15 @@ _idt:
 	.short  0		/* 32bits Reserved */
 	.short  0		/* 32bits Reserved */
 
-	
+
 .set i, i + 1
 .endr
-
-/* syscall int (ring 3) */
-_idt30:
-	.short 0				/* low 16 bits of ISR offset (_isr#i & 0FFFFh) */
-	.short codesel_64			/* selector */
-	.byte  0
-	.byte  0xee				/* present, ring 3, 32-bit interrupt gate */
-	.short 0				/* high 16 bits of ISR offset (_isr#i / 65536) */
 
 .global _idt_end
 _idt_end:
 
 /* Memory for the initial page table, we will use 3 pages for a
-   1 to 1 mapping that covers 1GB of physycal memory */ 
+   1 to 1 mapping that covers 1GB of physycal memory */
 .align 4096
 pml4:
 .fill 4096

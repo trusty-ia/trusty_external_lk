@@ -33,7 +33,16 @@
 #define __ALIGNED(x) __attribute__((aligned(x)))
 #define __PRINTFLIKE(__fmt,__varargs) __attribute__((__format__ (__printf__, __fmt, __varargs)))
 #define __SCANFLIKE(__fmt,__varargs) __attribute__((__format__ (__scanf__, __fmt, __varargs)))
+
+/*
+ * The following takes effect only when compiling secvm.a on One Android
+ * code base with Intel compiler.  ENABLE_LK is not defined when compiling
+ * Trusty LK.
+ */
+#ifndef ENABLE_LK
 #define __SECTION(x) __attribute((section(x)))
+#endif
+
 #define __PURE __attribute((pure))
 #define __CONST __attribute((const))
 #define __NO_RETURN __attribute__((noreturn))
