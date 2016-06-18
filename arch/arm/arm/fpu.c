@@ -63,8 +63,17 @@ void arm_fpu_undefined_instruction(struct arm_iframe *frame)
     thread_t *t = get_current_thread();
 
     if (unlikely(arch_in_int_handler())) {
+        int i;
+        dprintf(CRITICAL, "floating point code while some cpu is in irq context. pc 0x%x\n", frame->pc);
+        for (i = 0; i < 1000; i++) {
+            if (!arch_in_int_handler()) {
+                dprintf(CRITICAL, "arch_in_int_handler status cleared after %d reads\n", i);
+                goto false_alarm;
+            }
+        }
         panic("floating point code in irq context. pc 0x%x\n", frame->pc);
     }
+false_alarm:
 
     LTRACEF("enabling fpu on thread %p\n", t);
 
