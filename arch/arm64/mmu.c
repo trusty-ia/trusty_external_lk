@@ -23,8 +23,10 @@
 
 #include <arch/arm64/mmu.h>
 #include <assert.h>
+#include <bits.h>
 #include <debug.h>
 #include <err.h>
+#include <kernel/thread.h>
 #include <kernel/vm.h>
 #include <lib/heap.h>
 #include <stdlib.h>
@@ -35,6 +37,8 @@
 #define LOCAL_TRACE 0
 #define TRACE_CONTEXT_SWITCH 0
 
+#define ARM64_ASID_BITS (8) /* TODO: Use 16 bit ASIDs when hardware supports it */
+
 STATIC_ASSERT(((long)KERNEL_BASE >> MMU_KERNEL_SIZE_SHIFT) == -1);
 STATIC_ASSERT(((long)KERNEL_ASPACE_BASE >> MMU_KERNEL_SIZE_SHIFT) == -1);
 STATIC_ASSERT(MMU_KERNEL_SIZE_SHIFT <= 48);
@@ -44,6 +48,11 @@ STATIC_ASSERT(MMU_KERNEL_SIZE_SHIFT >= 25);
 pte_t arm64_kernel_translation_table[MMU_KERNEL_PAGE_TABLE_ENTRIES_TOP]
     __ALIGNED(MMU_KERNEL_PAGE_TABLE_ENTRIES_TOP * 8)
     __SECTION(".bss.prebss.translation_table");
+
+static uint64_t arch_mmu_asid(arch_aspace_t *aspace)
+{
+    return aspace->asid & BIT_MASK(ARM64_ASID_BITS);
+}
 
 static inline bool is_valid_vaddr(arch_aspace_t *aspace, vaddr_t vaddr)
 {
@@ -502,6 +511,18 @@ int arm64_mmu_unmap(vaddr_t vaddr, size_t size,
     return 0;
 }
 
+static void arm64_tlbflush_if_asid_changed(arch_aspace_t *aspace, asid_t asid)
+{
+    THREAD_LOCK(state);
+    if (asid != arch_mmu_asid(aspace)) {
+        TRACEF("asid changed for aspace %p while mapping or unmapping memory, 0x%llx -> 0x%llx, flush all tlbs\n",
+               aspace, asid, aspace->asid);
+        ARM64_TLBI_NOADDR(vmalle1is);
+        DSB;
+    }
+    THREAD_UNLOCK(state);
+}
+
 int arch_mmu_map(arch_aspace_t *aspace, vaddr_t vaddr, paddr_t paddr, uint count, uint flags)
 {
     LTRACEF("vaddr 0x%lx paddr 0x%lx count %u flags 0x%x\n", vaddr, paddr, count, flags);
@@ -530,11 +551,13 @@ int arch_mmu_map(arch_aspace_t *aspace, vaddr_t vaddr, paddr_t paddr, uint count
                          MMU_KERNEL_TOP_SHIFT, MMU_KERNEL_PAGE_SIZE_SHIFT,
                          aspace->tt_virt, MMU_ARM64_GLOBAL_ASID);
     } else {
+        asid_t asid = arch_mmu_asid(aspace);
         ret = arm64_mmu_map(vaddr, paddr, count * PAGE_SIZE,
                          mmu_flags_to_pte_attr(flags) | MMU_PTE_ATTR_NON_GLOBAL,
                          0, MMU_USER_SIZE_SHIFT,
                          MMU_USER_TOP_SHIFT, MMU_USER_PAGE_SIZE_SHIFT,
-                         aspace->tt_virt, MMU_ARM64_USER_ASID);
+                         aspace->tt_virt, asid);
+        arm64_tlbflush_if_asid_changed(aspace, asid);
     }
 
     return ret;
@@ -564,11 +587,12 @@ int arch_mmu_unmap(arch_aspace_t *aspace, vaddr_t vaddr, uint count)
                            aspace->tt_virt,
                            MMU_ARM64_GLOBAL_ASID);
     } else {
+        asid_t asid = arch_mmu_asid(aspace);
         ret = arm64_mmu_unmap(vaddr, count * PAGE_SIZE,
                            0, MMU_USER_SIZE_SHIFT,
                            MMU_USER_TOP_SHIFT, MMU_USER_PAGE_SIZE_SHIFT,
-                           aspace->tt_virt,
-                           MMU_ARM64_USER_ASID);
+                           aspace->tt_virt, asid);
+        arm64_tlbflush_if_asid_changed(aspace, asid);
     }
 
     return ret;
@@ -634,8 +658,12 @@ status_t arch_mmu_destroy_aspace(arch_aspace_t *aspace)
 
 void arch_mmu_context_switch(arch_aspace_t *aspace)
 {
+    bool flush_tlb;
+
     if (TRACE_CONTEXT_SWITCH)
         TRACEF("aspace %p\n", aspace);
+
+    flush_tlb = vmm_asid_activate(aspace, ARM64_ASID_BITS);
 
     uint64_t tcr;
     uint64_t ttbr;
@@ -643,13 +671,11 @@ void arch_mmu_context_switch(arch_aspace_t *aspace)
         DEBUG_ASSERT((aspace->flags & ARCH_ASPACE_FLAG_KERNEL) == 0);
 
         tcr = MMU_TCR_FLAGS_USER;
-        ttbr = ((uint64_t)MMU_ARM64_USER_ASID << 48) | aspace->tt_phys;
+        ttbr = (arch_mmu_asid(aspace) << 48) | aspace->tt_phys;
         ARM64_WRITE_SYSREG(ttbr0_el1, ttbr);
 
         if (TRACE_CONTEXT_SWITCH)
             TRACEF("ttbr 0x%llx, tcr 0x%llx\n", ttbr, tcr);
-        ARM64_TLBI(aside1, (uint64_t)MMU_ARM64_USER_ASID << 48);
-        DSB;
     } else {
         tcr = MMU_TCR_FLAGS_KERNEL;
 
@@ -657,6 +683,11 @@ void arch_mmu_context_switch(arch_aspace_t *aspace)
             TRACEF("tcr 0x%llx\n", tcr);
     }
 
-    ARM64_WRITE_SYSREG(tcr_el1, tcr);
+    ARM64_WRITE_SYSREG(tcr_el1, tcr); /* TODO: only needed when switching between kernel and user threads */
+
+    if (flush_tlb) {
+        ARM64_TLBI_NOADDR(vmalle1);
+        DSB;
+    }
 }
 

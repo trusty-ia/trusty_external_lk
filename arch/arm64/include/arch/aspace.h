@@ -25,6 +25,7 @@
 #include <compiler.h>
 #include <list.h>
 #include <arch/arm64/mmu.h>
+#include <kernel/asid.h>
 
 __BEGIN_CDECLS
 
@@ -33,12 +34,16 @@ struct arch_aspace {
     paddr_t tt_phys;
     pte_t *tt_virt;
 
+    asid_t asid;
+
     uint flags;
 
     /* range of address space */
     vaddr_t base;
     size_t size;
 };
+
+#define ARCH_ASPACE_HAS_ASID 1
 
 __END_CDECLS
 
