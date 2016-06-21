@@ -23,7 +23,7 @@ KERNEL_BASE ?= 0x00000000
 KERNEL_LOAD_OFFSET ?= 0x200000
 
 MODULE_SRCS += \
-	$(LOCAL_DIR)/crt0.S \
+	$(LOCAL_DIR)/crt0_64.S \
 	$(LOCAL_DIR)/arch.c \
 	$(LOCAL_DIR)/asm.S \
 	$(LOCAL_DIR)/cache.c \

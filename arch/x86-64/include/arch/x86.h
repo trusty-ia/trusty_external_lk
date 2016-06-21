@@ -398,6 +398,7 @@ static inline uint64_t check_smap_avail(void)
 	return ((reg_b>>0x13) & 0x1);
 }
 
+void x86_64_context_switch(vaddr_t *oldsp, vaddr_t newsp);
 __END_CDECLS
 
 #endif

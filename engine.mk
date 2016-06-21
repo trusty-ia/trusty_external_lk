@@ -54,13 +54,17 @@ GLOBAL_OPTFLAGS ?= $(ARCH_OPTFLAGS)
 GLOBAL_COMPILEFLAGS := -g -fno-builtin -finline -include $(CONFIGHEADER)
 GLOBAL_COMPILEFLAGS += -W -Wall -Wno-multichar -Wno-unused-parameter -Wno-unused-function -Wno-unused-label
 GLOBAL_CFLAGS := --std=gnu99 -Werror-implicit-function-declaration -Wstrict-prototypes -Wwrite-strings
+GLOBAL_CFLAGS += -fPIC -shared
+
 #GLOBAL_CFLAGS += -Werror
 GLOBAL_CPPFLAGS := -fno-exceptions -fno-rtti -fno-threadsafe-statics
 #GLOBAL_CPPFLAGS += -Weffc++
 GLOBAL_ASMFLAGS := -DASSEMBLY
+GLOBAL_ASMFLAGS += -c -fPIC
 GLOBAL_LDFLAGS :=
 
 GLOBAL_LDFLAGS += $(addprefix -L,$(LKINC))
+GLOBAL_LDFLAGS += -pie
 
 # Architecture specific compile flags
 ARCH_COMPILEFLAGS :=

@@ -10,8 +10,7 @@ endif
 
 $(OUTBIN): $(OUTELF)
 	@echo generating image: $@
-	$(NOECHO)$(SIZE) $<
-	$(NOECHO)$(OBJCOPY) -O binary $< $@
+	$(NOECHO)cp $< $@
 
 $(OUTELF).hex: $(OUTELF)
 	@echo generating hex file: $@

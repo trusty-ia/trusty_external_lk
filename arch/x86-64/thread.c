@@ -46,6 +46,7 @@ static void initial_thread_func(void) __NO_RETURN;
 static void initial_thread_func(void)
 {
 	int ret;
+	struct thread *_current_thread = get_current_thread();
 
 	/* release the thread lock that was implicitly held across the reschedule */
 	spin_unlock(&thread_lock);
@@ -102,50 +103,7 @@ void arch_context_switch(thread_t *oldthread, thread_t *newthread)
 	smp_mb();
 
 	/* save the old context and restore the new */
-	__asm__ __volatile__ (
-		"pushq $1f			\n\t"
-		"pushf				\n\t"
-		"pushq %%rdi			\n\t"
-		"pushq %%rsi			\n\t"
-		"pushq %%rdx			\n\t"
-		"pushq %%rcx			\n\t"
-		"pushq %%rax			\n\t"
-		"pushq %%rbx			\n\t"
-		"pushq %%rbp			\n\t"
-		"pushq %%r8			\n\t"
-		"pushq %%r9			\n\t"
-		"pushq %%r10			\n\t"
-		"pushq %%r11			\n\t"
-		"pushq %%r12			\n\t"
-		"pushq %%r13			\n\t"
-		"pushq %%r14			\n\t"
-		"pushq %%r15			\n\t"
-
-		"movq %%rsp,%0			\n\t"
-		"movq %1,%%rsp			\n\t"
-
-		"popq %%r15			\n\t"
-		"popq %%r14			\n\t"
-		"popq %%r13			\n\t"
-		"popq %%r12			\n\t"
-		"popq %%r11			\n\t"
-		"popq %%r10			\n\t"
-		"popq %%r9			\n\t"
-		"popq %%r8			\n\t"
-		"popq %%rbp			\n\t"
-		"popq %%rbx			\n\t"
-		"popq %%rax			\n\t"
-		"popq %%rcx			\n\t"
-		"popq %%rdx			\n\t"
-		"popq %%rsi			\n\t"
-		"popq %%rdi			\n\t"
-		"popf				\n\t"
-
-		"ret				\n\t"
-		"1:				\n\t"
-		: "=g" (oldthread->arch.rsp)
-		: "g" (newthread->arch.rsp)
-	);
+	x86_64_context_switch(&oldthread->arch.rsp, newthread->arch.rsp);
 }
 
 /* vim: noexpandtab */
