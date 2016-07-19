@@ -42,7 +42,11 @@ $(error No project specified.  Use "make projectname" or put "PROJECT := project
 endif
 endif
 
-DEBUG ?= 2
+# 0-> disable all logs (except critical logs)
+# 1-> enable partial logs (by default)
+# 2-> enable full logs
+# 3+ -> not defined.
+LKDEBUG ?= 1
 
 BUILDDIR := $(BUILDROOT)/build-$(PROJECT)
 OUTBIN := $(BUILDDIR)/lk.bin
@@ -159,9 +163,9 @@ GLOBAL_DEFINES += \
 	$(addsuffix =1,$(addprefix WITH_,$(ALLMODULES)))
 
 # debug build?
-ifneq ($(DEBUG),)
+ifneq ($(LKDEBUG),)
 GLOBAL_DEFINES += \
-	LK_DEBUGLEVEL=$(DEBUG)
+	LK_DEBUGLEVEL=$(LKDEBUG)
 endif
 
 # allow additional defines from outside the build system
