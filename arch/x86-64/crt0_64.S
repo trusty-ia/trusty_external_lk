@@ -39,6 +39,11 @@
 .global _start
 
 _start:
+    /* eVmm sends parameter by using RDI */
+    /* Store parameter pointer address to info_addr(pointer) */
+    leaq info_addr(%rip), %rax
+    movq %rdi, (%rax)
+
     /* Setting the PAT MSRs */
     xorq %rax, %rax
     xorq %rcx, %rcx
@@ -240,6 +245,10 @@ interrupt_common:
     iretq
 
 .data
+.align 8
+.global info_addr
+info_addr:
+    .quad 0
 .align 8
 .global _gdtr
 _gdtr:
