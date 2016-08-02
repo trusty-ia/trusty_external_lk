@@ -40,7 +40,7 @@
  * If you want to check which libraries have been loaded,
  * uncomment this this macro.
  */
-//#define TRACE_INIT (LK_DEBUGLEVEL >= 2)
+#define TRACE_INIT (LK_DEBUGLEVEL >= 2)
 #ifndef EARLIEST_TRACE_LEVEL
 #define EARLIEST_TRACE_LEVEL LK_INIT_LEVEL_ARCH_EARLY
 #endif
