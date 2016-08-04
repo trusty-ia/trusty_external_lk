@@ -32,6 +32,7 @@
 #include <platform.h>
 #include <platform/debug.h>
 #include <kernel/thread.h>
+#include <platform/sand.h>
 
 #if WITH_LIB_SM
 #define PRINT_LOCK_FLAGS SPIN_LOCK_FLAG_IRQ_FIQ
@@ -103,6 +104,9 @@ void spin(uint32_t usecs)
 void _panic(void *caller, const char *fmt, ...)
 {
 	dprintf(ALWAYS, "panic (caller %p): ", caller);
+
+	/* wipe the sensitive data */
+	clear_sensitive_data();
 
 	va_list ap;
 	va_start(ap, fmt);

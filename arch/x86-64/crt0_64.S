@@ -40,8 +40,8 @@
 
 _start:
     /* eVmm sends parameter by using RDI */
-    /* Store parameter pointer address to info_addr(pointer) */
-    leaq info_addr(%rip), %rax
+    /* save the param into g_trusty_startup_info */
+    leaq g_trusty_startup_info(%rip), %rax
     movq %rdi, (%rax)
 
     /* Setting the PAT MSRs */
@@ -246,9 +246,10 @@ interrupt_common:
 
 .data
 .align 8
-.global info_addr
-info_addr:
+.global g_trusty_startup_info
+g_trusty_startup_info:
     .quad 0
+
 .align 8
 .global _gdtr
 _gdtr:
