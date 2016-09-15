@@ -83,6 +83,8 @@ int snprintf(char *str, size_t len, const char *fmt, ...) __PRINTFLIKE(3, 4);
 int vsprintf(char *str, const char *fmt, va_list ap);
 int vsnprintf(char *str, size_t len, const char *fmt, va_list ap);
 
+// sccanf is not implemented.
+int sscanf(const char* str, const char* format, ...);
 
 __END_CDECLS
 
