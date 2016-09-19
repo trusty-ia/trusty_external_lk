@@ -38,7 +38,6 @@ extern map_addr_t g_CR3;
 
 /* Address width */
 extern uint32_t g_addr_width;
-
 /**
  * @brief  check if the address is valid
  *
@@ -700,4 +699,24 @@ void arch_mmu_init_percpu(void)
 	efer_msr = read_msr(x86_MSR_EFER);
 	efer_msr |= x86_EFER_NXE;
 	write_msr(x86_MSR_EFER, efer_msr);
+}
+
+/**
+* Build a flat 4GB pagetable with pagesize 2MB
+*/
+void build_pagetable(uint32_t *pgtable)
+{
+	uint32_t i;
+
+	/* Level 4 needs a single entry */
+	pgtable[0] = (uint32_t)&pgtable[1024] + 7;
+
+	/* Level 3 has one 64-bit entry for each GB of memory */
+	for (i = 0; i < 4; i++) {
+		pgtable[1024 + i * 2] = (uint32_t)&pgtable[2048] + 0x1000 * i + 7;
+	}
+
+	/* Level 2 has 2048 64-bit entries, each repesenting 2MB */
+	for (i = 0; i < 2048; i++)
+	    pgtable[2048 + i * 2] = 0x183 + (i << 21UL);
 }

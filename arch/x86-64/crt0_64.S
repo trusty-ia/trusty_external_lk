@@ -102,46 +102,30 @@ farjump:
     movq $tsssel, %rax
     ltr %ax
 
-    /* Setting the First PML4E with a PDP table reference*/
-    leaq pdp(%rip), %rax
-    leaq pml4(%rip), %rdi
-    orq  $0x7, %rax
-    movq %rax, (%rdi)
+    /* Build a 4GB pagetable with 2MB pagesize */
+    pushq %rdi
+    leaq pagetable(%rip), %rdi
+    call build_pagetable
 
-    /* Setting the First PDPTE with a Page table reference*/
-    leaq pte(%rip), %rax
-    leaq pdp(%rip), %rdi
-    orq  $0x7, %rax
-    movq %rax,  (%rdi)
-
-    leaq pte(%rip), %rsi
-    movq $0x1ff, %rcx
-    /* We need 256 entries of 2MB each to cover 1GB */
-fill_pte:
-    movq $0x1ff, %rax
-    subq %rcx, %rax
-    shlq $21,%rax
-    orq  $0x87, %rax
-    movq %rax, (%rsi)
-    addq $8, %rsi
-    loop fill_pte
-
-    /* Flushing TLB */
-    leaq pml4(%rip), %rax
-    movq %rax, %cr3
-
-    mov %cr3,%rax
-    mov %rax,%cr3
+    movq %rdi, %cr3
+    popq %rdi
 
     /* zero the bss section */
     leaq __bss_start(%rip), %rdi /* starting address of the bss */
     leaq __bss_end(%rip), %rcx   /* find the length of the bss in bytes */
     subq %rdi, %rcx
     shrq $2, %rcx		/* convert to 32 bit words, since the bss is aligned anyway */
+
 2:
     movq $0, (%rdi)
     addq $4, %rdi
     loop 2b
+
+    /* set the default params to 0, since these params are not used for now */
+    movq $0, %rdi
+    movq $0, %rsi
+    movq $0, %rdx
+    movq $0, %rcx
 
     /* call the main module */
     call lk_main
@@ -303,6 +287,7 @@ _null_2_gde:
     .int 0
     .int 0
 
+
 .set codesel_64, . - _gdt
 _code_64_gde:
     .short 0xffff			/* limit 15:00 */
@@ -407,15 +392,10 @@ _idt30:
 .global _idt_end
 _idt_end:
 
-    /* Memory for the initial page table, we will use 3 pages for a
-       1 to 1 mapping that covers 1GB of physycal memory */
+/* used to build a 4GB pagetable with 2M pagesize */
 .align 4096
-pml4:
-.fill 4096
-pdp:
-.fill 4096
-pte:
-.fill 4096
+pagetable:
+    .fill 4096*6,1,0x0
 
 .bss
 .align 4096
