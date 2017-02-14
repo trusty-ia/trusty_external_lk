@@ -35,6 +35,8 @@
 #include <arch/arch_ops.h>
 
 extern map_addr_t g_CR3;
+extern uint64_t __code_start;
+extern uintptr_t _heap_end;
 
 /* Address width */
 extern uint32_t g_addr_width;
@@ -588,6 +590,26 @@ int arch_mmu_unmap(vaddr_t vaddr, uint count)
 	return(x86_mmu_unmap(current_cr3_val, vaddr, count));
 }
 
+static bool is_map_range_allowed(struct map_range *range, arch_flags_t flags)
+{
+	paddr_t start = range->start_paddr;
+	paddr_t end = range->start_paddr + range->size - 1;
+
+	if(end < start)
+		return false;
+
+	if((start < (paddr_t)&__code_start) && (end < (paddr_t)&__code_start))
+		return (flags & ARCH_MMU_FLAG_NS) ? true : false;
+
+	if((start >= (paddr_t)&__code_start) && (end < (paddr_t)_heap_end))
+		return (flags & ARCH_MMU_FLAG_NS) ? false : true;
+
+	if(start >= (paddr_t)_heap_end)
+		return (flags & ARCH_MMU_FLAG_NS) ? true : false;
+
+	return false;
+}
+
 /**
  * @brief  Mapping a section/range with specific permissions
  *
@@ -602,6 +624,9 @@ status_t x86_mmu_map_range(addr_t pml4, struct map_range *range, arch_flags_t fl
 	DEBUG_ASSERT(pml4);
 	if(!range)
 		return ERR_INVALID_ARGS;
+
+	if (!is_map_range_allowed(range, flags))
+		return ERR_NOT_ALLOWED;
 
 	/* Calculating the number of 4k pages */
 	if(IS_ALIGNED(range->size, PAGE_SIZE))
