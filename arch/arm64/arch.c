@@ -112,7 +112,7 @@ void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top)
      * all interrupts enabled
      * mode 0: EL0t
      */
-    uint32_t spsr = 0;
+    uint64_t spsr = 0;
 
     arch_disable_ints();
 
