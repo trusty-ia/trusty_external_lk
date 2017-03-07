@@ -34,8 +34,6 @@ GLOBAL_LDFLAGS += -EL
 GLOBAL_MODULE_LDFLAGS += -EL
 endif
 
-LIBGCC := $(shell $(TOOLCHAIN_PREFIX)gcc $(GLOBAL_COMPILEFLAGS) $(GLOBAL_CFLAGS) -print-libgcc-file-name)
-$(info LIBGCC = $(LIBGCC))
 
 cc-option = $(shell if test -z "`$(1) $(2) -S -o /dev/null -xc /dev/null 2>&1`"; \
 	then echo "$(2)"; else echo "$(3)"; fi ;)

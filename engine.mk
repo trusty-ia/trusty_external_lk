@@ -191,8 +191,16 @@ endif
 
 # default to no ccache
 CCACHE ?=
+ifeq ($(call TOBOOL,$(CLANGBUILD)), true)
+ifeq ($(CLANG_BINDIR),)
+$(error clang directory not specified, please set CLANG_BINDIR)
+endif
+CC := $(CCACHE) $(CLANG_BINDIR)/clang
+GLOBAL_COMPILEFLAGS += -no-integrated-as
+else
 CC := $(CCACHE) $(TOOLCHAIN_PREFIX)gcc
-LD := $(TOOLCHAIN_PREFIX)ld
+endif
+LD := $(TOOLCHAIN_PREFIX)ld.bfd
 AR := $(TOOLCHAIN_PREFIX)ar
 OBJDUMP := $(TOOLCHAIN_PREFIX)objdump
 OBJCOPY := $(TOOLCHAIN_PREFIX)objcopy
@@ -200,6 +208,8 @@ CPPFILT := $(TOOLCHAIN_PREFIX)c++filt
 SIZE := $(TOOLCHAIN_PREFIX)size
 NM := $(TOOLCHAIN_PREFIX)nm
 STRIP := $(TOOLCHAIN_PREFIX)strip
+
+LIBGCC := $(shell $(CC) $(GLOBAL_COMPILEFLAGS) $(ARCH_COMPILEFLAGS) $(THUMBCFLAGS) -print-libgcc-file-name)
 
 # try to have the compiler output colorized error messages if available
 export GCC_COLORS ?= 1
