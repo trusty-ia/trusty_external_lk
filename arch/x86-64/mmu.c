@@ -128,19 +128,31 @@ arch_flags_t get_x86_arch_flags(arch_flags_t flags)
 {
 	arch_flags_t arch_flags = 0;
 
-    switch (flags & ARCH_MMU_FLAG_CACHE_MASK) {
-        case ARCH_MMU_FLAG_CACHED:
-            /* enabling write-back mode */
-            arch_flags |= X86_MMU_PG_PTE_PAT | X86_MMU_PG_PCD;
-        break;
-        case ARCH_MMU_FLAG_UNCACHED:
-            arch_flags |= X86_MMU_CACHE_DISABLE;
-        break;
-        default:
-        /* invalid cache option - can't be both cached & uncached */
-        break;
-    }
-
+	switch (flags & ARCH_MMU_FLAG_CACHE_MASK) {
+	case ARCH_MMU_FLAG_CACHED:
+		/* Enabling Write-Back (WB) mode
+		  * If PAT:PCD:PWT is 000
+		  * then PAT0 (0x06) is used
+		  * Encoding 06H is WB
+		  */
+		arch_flags &= ~X86_MMU_PG_PTE_PAT;
+		arch_flags &= ~X86_MMU_PG_PCD;
+		arch_flags &= ~X86_MMU_PG_PWT;
+		break;
+	case ARCH_MMU_FLAG_UNCACHED:
+		/* Enabling Uncasheable (UC) mode
+		  * If PAT:PCD:PWT is 011
+		  * then PAT3 (0x00) is used
+		  * Encoding 00H is Uncacheable (UC)
+		  */
+		arch_flags &= ~X86_MMU_PG_PTE_PAT;
+		arch_flags |= X86_MMU_PG_PCD;
+		arch_flags |= X86_MMU_PG_PWT;
+		break;
+	default:
+		/* invalid cache option - can't be both cached & uncached */
+		break;
+	}
 
 	if(!(flags & ARCH_MMU_FLAG_PERM_RO))
 		arch_flags |= X86_MMU_PG_RW;
@@ -167,11 +179,13 @@ uint get_arch_mmu_flags(arch_flags_t flags)
 	if(flags & X86_MMU_PG_U)
 		mmu_flags |= ARCH_MMU_FLAG_PERM_USER;
 
-	if(flags & X86_MMU_CACHE_DISABLE)
+	/* Default memory type is CASHED/WB */
+	if((flags & X86_MMU_PG_PCD) &&
+	    (flags & X86_MMU_PG_PWT) &&
+	    !(flags & X86_MMU_PG_PTE_PAT))
 		mmu_flags |= ARCH_MMU_FLAG_UNCACHED;
-
-    if(flags & (X86_MMU_PG_PTE_PAT | X86_MMU_PG_PCD))
-        mmu_flags |= ARCH_MMU_FLAG_CACHED;
+	else
+		mmu_flags |= ARCH_MMU_FLAG_CACHED;
 
 	if(flags & X86_MMU_PG_NX)
 		mmu_flags |= ARCH_MMU_FLAG_PERM_NO_EXECUTE;
