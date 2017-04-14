@@ -335,6 +335,14 @@ static inline uint64_t x86_get_cr4(void)
 	return rv;
 }
 
+static inline void x86_set_cr8(uint64_t in_val)
+{
+	__asm__ __volatile__ (
+		"movq %0,%%cr8 \n\t"
+		:
+		:"r" (in_val));
+}
+
 static inline void x86_set_cr4(uint64_t in_val)
 {
 	__asm__ __volatile__ (
