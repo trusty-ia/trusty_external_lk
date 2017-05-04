@@ -53,12 +53,12 @@
 #if defined(PAE_MODE_ENABLED) || ARCH_X86_64
 /* PAE mode */
 #define X86_PDPT_ADDR_MASK  (0x00000000ffffffe0ul)
-#define X86_PG_FRAME        (0xfffffffffffff000ul)
+#define X86_PG_VA_FRAME     (0xfffffffffffff000ul)
+#define X86_PG_PA_FRAME     (0x0000fffffffff000ul)
 #define X86_PHY_ADDR_MASK   (0x000ffffffffffffful)
 #define X86_FLAGS_MASK      (0x0000000000000ffful)  /* NX Bit is ignored in the PAE mode */
 #define X86_PTE_NOT_PRESENT (0xFFFFFFFFFFFFFFFEul)
 #define X86_2MB_PAGE_FRAME  (0x000fffffffe00000ul)
-#define X86_PTE_FRAME       (0x0000fffffffff000ul)
 #define PAGE_OFFSET_MASK_4KB    (0x0000000000000ffful)
 #define PAGE_OFFSET_MASK_2MB    (0x00000000001ffffful)
 #define X86_MMU_PG_NX       (1ul << 63)
