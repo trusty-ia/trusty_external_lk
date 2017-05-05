@@ -15,9 +15,6 @@ MODULE_SRCS += \
 #enable it will duplicate with lib/lib/libstdc++trusty/new.cpp
 #	$(LOCAL_DIR)/new.cpp
 
-ifneq ($(WITH_CUSTOM_MALLOC),true)
-MODULE_SRCS += $(LOCAL_DIR)/malloc.c
-endif
 
 include $(LOCAL_DIR)/string/rules.mk
 

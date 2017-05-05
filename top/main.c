@@ -37,6 +37,7 @@
 #include <kernel/thread.h>
 #include <lk/init.h>
 #include <lk/main.h>
+#include <assert.h>
 
 /* saved boot arguments from whoever loaded the system */
 ulong lk_boot_args[4];
@@ -69,6 +70,20 @@ static void call_constructors(void)
 		ctor++;
 	}
 }
+#if 1
+#define TRUSTY_VMCALL_PRINT 0x74727509
+void my_vmcall(uint32_t mark)
+{
+//	uint32_t hi = (mark>>32)& ((1<<32) -1);
+//	uint32_t low = mark & ((1<<32) -1);
+    __asm__ __volatile__(
+		"vmcall;"
+            ::"a"(TRUSTY_VMCALL_PRINT),"b"(mark)
+            );
+
+}
+
+#endif
 
 /* called from arch code */
 void lk_main(ulong arg0, ulong arg1, ulong arg2, ulong arg3)
@@ -102,6 +117,7 @@ void lk_main(ulong arg0, ulong arg1, ulong arg2, ulong arg3)
 	dprintf(INFO, "boot args 0x%lx 0x%lx 0x%lx 0x%lx\n",
 		lk_boot_args[0], lk_boot_args[1], lk_boot_args[2], lk_boot_args[3]);
 
+
 	// deal with any static constructors
 	dprintf(SPEW, "calling constructors\n");
 	call_constructors();
@@ -120,7 +136,7 @@ void lk_main(ulong arg0, ulong arg1, ulong arg2, ulong arg3)
 	// create a thread to complete system initialization
 	dprintf(SPEW, "creating bootstrap completion thread\n");
 	thread_t *t = thread_create("bootstrap2", &bootstrap2, NULL, DEFAULT_PRIORITY, DEFAULT_STACK_SIZE);
-	t->pinned_cpu = 0;
+	thread_set_pinned_cpu(t, 0);
 	thread_detach(t);
 	thread_resume(t);
 
@@ -139,6 +155,7 @@ static int bootstrap2(void *arg)
 	dprintf(SPEW, "initializing platform\n");
 	lk_primary_cpu_init_level(LK_INIT_LEVEL_ARCH, LK_INIT_LEVEL_PLATFORM - 1);
 	platform_init();
+
 
 	// initialize the target
 	dprintf(SPEW, "initializing target\n");

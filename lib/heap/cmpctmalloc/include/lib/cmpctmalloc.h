@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Travis Geiselbrecht
+ * Copyright (c) 2015 Travis Geiselbrecht
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,33 +20,20 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#pragma once
+
 #include <compiler.h>
-#include <debug.h>
-#include <kernel/debug.h>
-#include <kernel/thread.h>
-#include <kernel/timer.h>
-#include <kernel/mp.h>
-#include <kernel/port.h>
 
-void kernel_init(void)
-{
-    // if enabled, configure the kernel's event log
-    kernel_evlog_init();
+__BEGIN_CDECLS;
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing mp\n");
-    mp_init();
+void *cmpct_alloc(size_t);
+void *cmpct_realloc(void *, size_t);
+void cmpct_free(void *);
+void *cmpct_memalign(size_t size, size_t alignment);
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing threads\n");
-    thread_init();
+void cmpct_init(void);
+void cmpct_dump(void);
+void cmpct_test(void);
+void cmpct_trim(void);
 
-    // initialize kernel timers
-    dprintf(SPEW, "initializing timers\n");
-    timer_init();
-
-    // initialize ports
-    dprintf(SPEW, "initializing ports\n");
-    port_init();
-}
-
+__END_CDECLS;

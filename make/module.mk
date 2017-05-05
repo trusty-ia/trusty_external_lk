@@ -40,6 +40,9 @@ endif
 MODULE_SRCDIR := $(MODULE)
 MODULE_BUILDDIR := $(call TOBUILDDIR,$(MODULE_SRCDIR))
 
+# add a local include dir to the global include path
+GLOBAL_INCLUDES += $(MODULE_SRCDIR)/include
+
 # add the listed module deps to the global list
 MODULES += $(MODULE_DEPS)
 
@@ -60,6 +63,7 @@ MODULE_DEFINES += MODULE_SRCDEPS=\"$(subst $(SPACE),_,$(MODULE_SRCDEPS))\"
 MODULE_DEFINES += MODULE_DEPS=\"$(subst $(SPACE),_,$(MODULE_DEPS))\"
 
 ifeq (true,$(call TOBOOL,$(MODULE_STATIC_LIB)))
+$(warning >>>>>>>>>>>>)
 MODULE_DEFINES += MODULE_STATIC_LIB=1
 endif
 
@@ -85,8 +89,10 @@ include make/compile.mk
 #$(info MODULE_OBJS = $(MODULE_OBJS))
 
 # build a ld -r style combined object
+
 ifeq (true,$(call TOBOOL,$(MODULE_STATIC_LIB)))
 
+$(error >>>>>>>>>>>>)
 MODULE_OBJECT := $(call TOBUILDDIR,$(MODULE_SRCDIR).mod.a)
 $(MODULE_OBJECT): $(MODULE_OBJS) $(MODULE_EXTRA_OBJS)
 	@$(MKDIR)

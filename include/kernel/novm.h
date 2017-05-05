@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Travis Geiselbrecht
+ * Copyright (c) 2015 Google, Inc. All rights reserved
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,33 +20,36 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <compiler.h>
-#include <debug.h>
-#include <kernel/debug.h>
-#include <kernel/thread.h>
-#include <kernel/timer.h>
-#include <kernel/mp.h>
-#include <kernel/port.h>
+#ifndef __KERNEL_NOVM_H
+#define __KERNEL_NOVM_H
 
-void kernel_init(void)
-{
-    // if enabled, configure the kernel's event log
-    kernel_evlog_init();
+#include <stddef.h>
+#include <stdlib.h>
+#include <arch.h>
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing mp\n");
-    mp_init();
+#define PAGE_ALIGN(x) ALIGN(x, PAGE_SIZE)
+#define IS_PAGE_ALIGNED(x) IS_ALIGNED(x, PAGE_SIZE)
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing threads\n");
-    thread_init();
+// arena bitmaps for novm_alloc_pages
+#define NOVM_ARENA_ANY (UINT32_MAX)
+#define NOVM_ARENA_MAIN (1<<0)
+#define NOVM_ARENA_SECONDARY (~NOVM_ARENA_MAIN)
 
-    // initialize kernel timers
-    dprintf(SPEW, "initializing timers\n");
-    timer_init();
+void *novm_alloc_pages(size_t pages, uint32_t arena_bitmap);
+void novm_free_pages(void *address, size_t pages);
+status_t novm_alloc_specific_pages(void *address, size_t pages);
 
-    // initialize ports
-    dprintf(SPEW, "initializing ports\n");
-    port_init();
-}
+// You can call this once and it will give you some possibly unaligned memory
+// that would otherwise go to waste.  The memory can't be freed.
+void *novm_alloc_unaligned(size_t *size_return);
 
+void novm_add_arena(const char *name, uintptr_t arena_start, uintptr_t arena_size);
+
+struct page_range {
+    void* address;
+    size_t size;
+};
+
+int novm_get_arenas(struct page_range* ranges, int number_of_ranges);
+
+#endif

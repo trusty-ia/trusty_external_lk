@@ -10,8 +10,10 @@ endif
 
 $(EXTRA_LINKER_SCRIPTS):
 
+#$(NOECHO)$(OBJCOPY) -O binary $< $@
 $(OUTBIN): $(OUTELF)
 	@echo generating image: $@
+	$(NOECHO)$(SIZE) $<
 	$(NOECHO)cp $< $@
 
 $(OUTELF).hex: $(OUTELF)

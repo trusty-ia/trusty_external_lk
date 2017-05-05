@@ -1,5 +1,5 @@
 SECTIONS {
-    .init ALIGN(8) : {
+    .init : ALIGN(4096) {
         . = ALIGN(8);
         __lk_init = .;
         KEEP (*(.lk_init))

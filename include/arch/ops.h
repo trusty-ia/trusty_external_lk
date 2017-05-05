@@ -33,15 +33,22 @@
 __BEGIN_CDECLS
 
 /* fast routines that most arches will implement inline */
-static void arch_enable_ints(void);
-static void arch_disable_ints(void);
-static bool arch_ints_disabled(void);
+void arch_enable_ints(void);
+void arch_disable_ints(void);
+bool arch_ints_disabled(void);
 static bool arch_in_int_handler(void);
 
 static int atomic_swap(volatile int *ptr, int val);
 static int atomic_add(volatile int *ptr, int val);
+
+
+#if ARCH_X86_32
+static int atomic_and(volatile int *ptr, int val);
+static int atomic_or(volatile int *ptr, int val);
+#elif ARCH_X86_64
 static int atomic_and(volatile int *ptr, long val);
 static int atomic_or(volatile int *ptr, long val);
+#endif
 
 static uint32_t arch_cycle_count(void);
 

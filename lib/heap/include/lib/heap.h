@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Travis Geiselbrecht
+ * Copyright (c) 2008-2015 Travis Geiselbrecht
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,33 +20,27 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#pragma once
+
+#include <stddef.h>
+#include <sys/types.h>
 #include <compiler.h>
-#include <debug.h>
-#include <kernel/debug.h>
-#include <kernel/thread.h>
-#include <kernel/timer.h>
-#include <kernel/mp.h>
-#include <kernel/port.h>
 
-void kernel_init(void)
-{
-    // if enabled, configure the kernel's event log
-    kernel_evlog_init();
+__BEGIN_CDECLS;
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing mp\n");
-    mp_init();
+/* standard heap definitions */
+void *malloc(size_t size) __MALLOC;
+void *memalign(size_t boundary, size_t size) __MALLOC;
+void *calloc(size_t count, size_t size) __MALLOC;
+void *realloc(void *ptr, size_t size) __MALLOC;
+void free(void *ptr);
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing threads\n");
-    thread_init();
+void heap_init(void);
 
-    // initialize kernel timers
-    dprintf(SPEW, "initializing timers\n");
-    timer_init();
+/* critical section time delayed free */
+void heap_delayed_free(void *);
 
-    // initialize ports
-    dprintf(SPEW, "initializing ports\n");
-    port_init();
-}
+/* tell the heap to return any free pages it can find */
+void heap_trim(void);
 
+__END_CDECLS;

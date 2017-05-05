@@ -35,7 +35,11 @@ LIBC_STRING_C_DIR := $(LOCAL_DIR)
 # include the arch specific string routines
 #
 # the makefile may filter out implemented versions from the C_STRING_OPS variable
+ifeq ($(ARCH), x86)
+include $(LOCAL_DIR)/arch/$(SUBARCH)/rules.mk
+else
 include $(LOCAL_DIR)/arch/$(ARCH)/rules.mk
+endif
 
 MODULE_SRCS += \
 	$(addprefix $(LIBC_STRING_C_DIR)/,$(addsuffix .c,$(C_STRING_OPS)))

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Travis Geiselbrecht
+ * Copyright (c) 2006-2015 Travis Geiselbrecht
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,33 +20,32 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <compiler.h>
+#include <new.h>
 #include <debug.h>
-#include <kernel/debug.h>
-#include <kernel/thread.h>
-#include <kernel/timer.h>
-#include <kernel/mp.h>
-#include <kernel/port.h>
+#include <lib/heap.h>
 
-void kernel_init(void)
+void *operator new(size_t s)
 {
-    // if enabled, configure the kernel's event log
-    kernel_evlog_init();
+    return malloc(s);
+}
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing mp\n");
-    mp_init();
+void *operator new[](size_t s)
+{
+    return malloc(s);
+}
 
-    // initialize the threading system
-    dprintf(SPEW, "initializing threads\n");
-    thread_init();
+void *operator new(size_t , void *p)
+{
+    return p;
+}
 
-    // initialize kernel timers
-    dprintf(SPEW, "initializing timers\n");
-    timer_init();
+void operator delete(void *p)
+{
+    return free(p);
+}
 
-    // initialize ports
-    dprintf(SPEW, "initializing ports\n");
-    port_init();
+void operator delete[](void *p)
+{
+    return free(p);
 }
 

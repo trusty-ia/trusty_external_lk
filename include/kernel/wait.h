@@ -30,20 +30,22 @@
 #include <arch/ops.h>
 #include <arch/thread.h>
 
+__BEGIN_CDECLS;
+
 /* wait queue stuff */
-#define WAIT_QUEUE_MAGIC 'wait'
+#define WAIT_QUEUE_MAGIC (0x77616974) // 'wait'
 
 typedef struct wait_queue {
-	int magic;
-	struct list_node list;
-	int count;
+    int magic;
+    struct list_node list;
+    int count;
 } wait_queue_t;
 
 #define WAIT_QUEUE_INITIAL_VALUE(q) \
 { \
-	.magic = WAIT_QUEUE_MAGIC, \
-	.list = LIST_INITIAL_VALUE((q).list), \
-	.count = 0 \
+    .magic = WAIT_QUEUE_MAGIC, \
+    .list = LIST_INITIAL_VALUE((q).list), \
+    .count = 0 \
 }
 
 /* wait queue primitive */
@@ -78,6 +80,8 @@ int wait_queue_wake_all(wait_queue_t *, bool reschedule, status_t wait_queue_err
  * return an error if the thread is not currently blocked (or is the current thread)
  */
 status_t thread_unblock_from_wait_queue(struct thread *t, status_t wait_queue_error);
+
+__END_CDECLS;
 
 #endif
 

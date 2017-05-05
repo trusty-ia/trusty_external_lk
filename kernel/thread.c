@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 Travis Geiselbrecht
+ * Copyright (c) 2008-2015 Travis Geiselbrecht
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -45,14 +45,18 @@
 #include <platform.h>
 #include <target.h>
 #include <lib/heap.h>
-
-#if LK_DEBUGLEVEL > 1
-#define THREAD_CHECKS 1
+#if WITH_KERNEL_VM
+#include <kernel/vm.h>
 #endif
 
 #if THREAD_STATS
 struct thread_stats thread_stats[SMP_MAX_CPUS];
 #endif
+
+#define STACK_DEBUG_BYTE (0x99)
+#define STACK_DEBUG_WORD (0x99999999)
+
+#define DEBUG_THREAD_CONTEXT_SWITCH 0
 
 /* global thread list */
 static struct list_node thread_list;
@@ -67,11 +71,14 @@ static uint32_t run_queue_bitmap;
 /* make sure the bitmap is large enough to cover our number of priorities */
 STATIC_ASSERT(NUM_PRIORITIES <= sizeof(run_queue_bitmap) * 8);
 
-/* Priority of current thread running on cpu, or last signalled */
-static int cpu_priority[SMP_MAX_CPUS];
-
 /* the idle thread(s) (statically allocated) */
-static thread_t idle_threads[SMP_MAX_CPUS];
+#if WITH_SMP
+static thread_t _idle_threads[SMP_MAX_CPUS];
+#define idle_thread(cpu) (&_idle_threads[cpu])
+#else
+static thread_t _idle_thread;
+#define idle_thread(cpu) (&_idle_thread)
+#endif
 
 /* local routines */
 static void thread_resched(void);
@@ -85,38 +92,34 @@ static timer_t preempt_timer[SMP_MAX_CPUS];
 /* run queue manipulation */
 static void insert_in_run_queue_head(thread_t *t)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(t->state == THREAD_READY);
-	ASSERT(!list_in_list(&t->queue_node));
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(t->state == THREAD_READY);
+    DEBUG_ASSERT(!list_in_list(&t->queue_node));
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
 
-	list_add_head(&run_queue[t->priority], &t->queue_node);
-	run_queue_bitmap |= (1<<t->priority);
+    list_add_head(&run_queue[t->priority], &t->queue_node);
+    run_queue_bitmap |= (1<<t->priority);
 }
 
 static void insert_in_run_queue_tail(thread_t *t)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(t->state == THREAD_READY);
-	ASSERT(!list_in_list(&t->queue_node));
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(t->state == THREAD_READY);
+    DEBUG_ASSERT(!list_in_list(&t->queue_node));
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
 
-	list_add_tail(&run_queue[t->priority], &t->queue_node);
-	run_queue_bitmap |= (1<<t->priority);
+    list_add_tail(&run_queue[t->priority], &t->queue_node);
+    run_queue_bitmap |= (1<<t->priority);
 }
 
 static void init_thread_struct(thread_t *t, const char *name)
 {
-	memset(t, 0, sizeof(thread_t));
-	t->magic = THREAD_MAGIC;
-	t->pinned_cpu = -1;
-	strlcpy(t->name, name, sizeof(t->name));
+    memset(t, 0, sizeof(thread_t));
+    t->magic = THREAD_MAGIC;
+    thread_set_pinned_cpu(t, -1);
+    strlcpy(t->name, name, sizeof(t->name));
 }
 
 /**
@@ -148,64 +151,85 @@ static void init_thread_struct(thread_t *t, const char *name)
  */
 thread_t *thread_create_etc(thread_t *t, const char *name, thread_start_routine entry, void *arg, int priority, void *stack, size_t stack_size)
 {
-	unsigned int flags = 0;
+    unsigned int flags = 0;
 
-	if (!t) {
-		t = malloc(sizeof(thread_t));
-		if (!t)
-			return NULL;
-		flags |= THREAD_FLAG_FREE_STRUCT;
-	}
+    if (!t) {
+        t = malloc(sizeof(thread_t));
+        if (!t)
+            return NULL;
+        flags |= THREAD_FLAG_FREE_STRUCT;
+    }
 
-	init_thread_struct(t, name);
+    init_thread_struct(t, name);
 
-	t->entry = entry;
-	t->arg = arg;
-	t->priority = priority;
-	t->state = THREAD_SUSPENDED;
-	t->blocking_wait_queue = NULL;
-	t->wait_queue_block_ret = NO_ERROR;
-	t->curr_cpu = -1;
+    t->entry = entry;
+    t->arg = arg;
+    t->priority = priority;
+    t->state = THREAD_SUSPENDED;
+    t->blocking_wait_queue = NULL;
+    t->wait_queue_block_ret = NO_ERROR;
+    thread_set_curr_cpu(t, -1);
 
-	t->retcode = 0;
-	wait_queue_init(&t->retcode_wait_queue);
+    t->retcode = 0;
+    wait_queue_init(&t->retcode_wait_queue);
 
-	/* create the stack */
-	if (!stack) {
-		t->stack = malloc(stack_size);
-		if (!t->stack) {
-			if (flags & THREAD_FLAG_FREE_STRUCT)
-				free(t);
-			return NULL;
-		}
-		flags |= THREAD_FLAG_FREE_STACK;
-	}
+#if WITH_KERNEL_VM
+    t->aspace = NULL;
+#endif
 
-	t->stack_size = stack_size;
+    /* create the stack */
+    if (!stack) {
+#if THREAD_STACK_BOUNDS_CHECK
+        stack_size += THREAD_STACK_PADDING_SIZE;
+        flags |= THREAD_FLAG_DEBUG_STACK_BOUNDS_CHECK;
+#endif
+        t->stack = malloc(stack_size);
+        if (!t->stack) {
+            if (flags & THREAD_FLAG_FREE_STRUCT)
+                free(t);
+            return NULL;
+        }
+        flags |= THREAD_FLAG_FREE_STACK;
+#if THREAD_STACK_BOUNDS_CHECK
+        memset(t->stack, STACK_DEBUG_BYTE, THREAD_STACK_PADDING_SIZE);
+#endif
+    } else {
+        t->stack = stack;
+    }
+#if THREAD_STACK_HIGHWATER
+    if (flags & THREAD_FLAG_DEBUG_STACK_BOUNDS_CHECK) {
+        memset(t->stack + THREAD_STACK_PADDING_SIZE, STACK_DEBUG_BYTE,
+               stack_size - THREAD_STACK_PADDING_SIZE);
+    } else {
+        memset(t->stack, STACK_DEBUG_BYTE, stack_size);
+    }
+#endif
 
-	/* save whether or not we need to free the thread struct and/or stack */
-	t->flags = flags;
+    t->stack_size = stack_size;
 
-	/* inheirit thread local storage from the parent */
-	thread_t *current_thread = get_current_thread();
-	int i;
-	for (i=0; i < MAX_TLS_ENTRY; i++)
-		t->tls[i] = current_thread->tls[i];
+    /* save whether or not we need to free the thread struct and/or stack */
+    t->flags = flags;
 
-	/* set up the initial stack frame */
-	arch_thread_initialize(t);
+    /* inheirit thread local storage from the parent */
+    thread_t *current_thread = get_current_thread();
+    int i;
+    for (i=0; i < MAX_TLS_ENTRY; i++)
+        t->tls[i] = current_thread->tls[i];
 
-	/* add it to the global thread list */
-	THREAD_LOCK(state);
-	list_add_head(&thread_list, &t->thread_list_node);
-	THREAD_UNLOCK(state);
+    /* set up the initial stack frame */
+    arch_thread_initialize(t);
 
-	return t;
+    /* add it to the global thread list */
+    THREAD_LOCK(state);
+    list_add_head(&thread_list, &t->thread_list_node);
+    THREAD_UNLOCK(state);
+
+    return t;
 }
 
 thread_t *thread_create(const char *name, thread_start_routine entry, void *arg, int priority, size_t stack_size)
 {
-	return thread_create_etc(NULL, name, entry, arg, priority, NULL, stack_size);
+    return thread_create_etc(NULL, name, entry, arg, priority, NULL, stack_size);
 }
 
 /**
@@ -217,73 +241,37 @@ thread_t *thread_create(const char *name, thread_start_routine entry, void *arg,
  */
 status_t thread_set_real_time(thread_t *t)
 {
-	if (!t)
-		return ERR_INVALID_ARGS;
+    if (!t)
+        return ERR_INVALID_ARGS;
 
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 #if PLATFORM_HAS_DYNAMIC_TIMER
-	if (t == get_current_thread()) {
-		/* if we're currently running, cancel the preemption timer. */
-		timer_cancel(&preempt_timer[arch_curr_cpu_num()]);
-	}
+    if (t == get_current_thread()) {
+        /* if we're currently running, cancel the preemption timer. */
+        timer_cancel(&preempt_timer[arch_curr_cpu_num()]);
+    }
 #endif
-	t->flags |= THREAD_FLAG_REAL_TIME;
-	THREAD_UNLOCK(state);
+    t->flags |= THREAD_FLAG_REAL_TIME;
+    THREAD_UNLOCK(state);
 
-	return NO_ERROR;
+    return NO_ERROR;
 }
 
 static bool thread_is_realtime(thread_t *t)
 {
-	return (t->flags & THREAD_FLAG_REAL_TIME) && t->priority > DEFAULT_PRIORITY;
+    return (t->flags & THREAD_FLAG_REAL_TIME) && t->priority > DEFAULT_PRIORITY;
 }
 
 static bool thread_is_idle(thread_t *t)
 {
-	return !!(t->flags & THREAD_FLAG_IDLE);
+    return !!(t->flags & THREAD_FLAG_IDLE);
 }
 
 static bool thread_is_real_time_or_idle(thread_t *t)
 {
-	return !!(t->flags & (THREAD_FLAG_REAL_TIME | THREAD_FLAG_IDLE));
-}
-
-static mp_cpu_mask_t thread_get_mp_reschedule_target(thread_t *current_thread, thread_t *t)
-{
-#if WITH_SMP
-	uint cpu = arch_curr_cpu_num();
-	uint target_cpu;
-
-	if (t->pinned_cpu != -1 && current_thread->pinned_cpu == t->pinned_cpu)
-		return 0;
-
-	if (t->pinned_cpu == -1 || (uint)t->pinned_cpu == cpu)
-		return 0;
-
-	target_cpu = (uint)t->pinned_cpu;
-
-	if (t->priority < cpu_priority[target_cpu])
-		return 0;
-
-#ifdef DEBUG_THREAD_CPU_WAKE
-	dprintf(ALWAYS, "%s: cpu %d, wake cpu %d, priority %d for priority %d thread (current priority %d)\n",
-		__func__, cpu, target_cpu, cpu_priority[target_cpu], t->priority, current_thread->priority);
-	cpu_priority[target_cpu] = t->priority;
-#endif
-
-	return 1UL << target_cpu;
-#else
-	return 0;
-#endif
-}
-
-static void thread_mp_reschedule(thread_t *current_thread, thread_t *t)
-{
-	mp_reschedule(thread_get_mp_reschedule_target(current_thread, t), 0);
+    return !!(t->flags & (THREAD_FLAG_REAL_TIME | THREAD_FLAG_IDLE));
 }
 
 /**
@@ -298,114 +286,106 @@ static void thread_mp_reschedule(thread_t *current_thread, thread_t *t)
  */
 status_t thread_resume(thread_t *t)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(t->state != THREAD_DEATH);
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(t->state != THREAD_DEATH);
 
-	bool resched = false;
-	bool ints_disabled = arch_ints_disabled();
-	THREAD_LOCK(state);
-	if (t->state == THREAD_SUSPENDED) {
-		t->state = THREAD_READY;
-		insert_in_run_queue_head(t);
-		if (!ints_disabled) /* HACK, don't resced into bootstrap thread before idle thread is set up */
-			resched = true;
-	}
+    bool resched = false;
+    bool ints_disabled = arch_ints_disabled();
+    THREAD_LOCK(state);
+    if (t->state == THREAD_SUSPENDED) {
+        t->state = THREAD_READY;
+        insert_in_run_queue_head(t);
+        if (!ints_disabled) /* HACK, don't resced into bootstrap thread before idle thread is set up */
+            resched = true;
+    }
 
-	thread_mp_reschedule(get_current_thread(), t);
+    mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 
-	if (resched)
-		thread_yield();
+    if (resched)
+        thread_yield();
 
-	return NO_ERROR;
+    return NO_ERROR;
 }
 
 status_t thread_detach_and_resume(thread_t *t)
 {
-	status_t err;
-	err = thread_detach(t);
-	if (err < 0)
-		return err;
-	return thread_resume(t);
+    status_t err;
+    err = thread_detach(t);
+    if (err < 0)
+        return err;
+    return thread_resume(t);
 }
 
 status_t thread_join(thread_t *t, int *retcode, lk_time_t timeout)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	if (t->flags & THREAD_FLAG_DETACHED) {
-		/* the thread is detached, go ahead and exit */
-		THREAD_UNLOCK(state);
-		return ERR_THREAD_DETACHED;
-	}
+    if (t->flags & THREAD_FLAG_DETACHED) {
+        /* the thread is detached, go ahead and exit */
+        THREAD_UNLOCK(state);
+        return ERR_THREAD_DETACHED;
+    }
 
-	/* wait for the thread to die */
-	if (t->state != THREAD_DEATH) {
-		status_t err = wait_queue_block(&t->retcode_wait_queue, timeout);
-		if (err < 0) {
-			THREAD_UNLOCK(state);
-			return err;
-		}
-	}
+    /* wait for the thread to die */
+    if (t->state != THREAD_DEATH) {
+        status_t err = wait_queue_block(&t->retcode_wait_queue, timeout);
+        if (err < 0) {
+            THREAD_UNLOCK(state);
+            return err;
+        }
+    }
 
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(t->state == THREAD_DEATH);
-	ASSERT(t->blocking_wait_queue == NULL);
-	ASSERT(!list_in_list(&t->queue_node));
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(t->state == THREAD_DEATH);
+    DEBUG_ASSERT(t->blocking_wait_queue == NULL);
+    DEBUG_ASSERT(!list_in_list(&t->queue_node));
 
-	/* save the return code */
-	if (retcode)
-		*retcode = t->retcode;
+    /* save the return code */
+    if (retcode)
+        *retcode = t->retcode;
 
-	/* remove it from the master thread list */
-	list_delete(&t->thread_list_node);
+    /* remove it from the master thread list */
+    list_delete(&t->thread_list_node);
 
-	/* clear the structure's magic */
-	t->magic = 0;
+    /* clear the structure's magic */
+    t->magic = 0;
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 
-	/* free its stack and the thread structure itself */
-	if (t->flags & THREAD_FLAG_FREE_STACK && t->stack)
-		free(t->stack);
+    /* free its stack and the thread structure itself */
+    if (t->flags & THREAD_FLAG_FREE_STACK && t->stack)
+        free(t->stack);
 
-	if (t->flags & THREAD_FLAG_FREE_STRUCT)
-		free(t);
+    if (t->flags & THREAD_FLAG_FREE_STRUCT)
+        free(t);
 
-	return NO_ERROR;
+    return NO_ERROR;
 }
 
 status_t thread_detach(thread_t *t)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	/* if another thread is blocked inside thread_join() on this thread,
-	 * wake them up with a specific return code */
-	wait_queue_wake_all(&t->retcode_wait_queue, false, ERR_THREAD_DETACHED);
+    /* if another thread is blocked inside thread_join() on this thread,
+     * wake them up with a specific return code */
+    wait_queue_wake_all(&t->retcode_wait_queue, false, ERR_THREAD_DETACHED);
 
-	/* if it's already dead, then just do what join would have and exit */
-	if (t->state == THREAD_DEATH) {
-		t->flags &= ~THREAD_FLAG_DETACHED; /* makes sure thread_join continues */
-		THREAD_UNLOCK(state);
-		return thread_join(t, NULL, 0);
-	} else {
-		t->flags |= THREAD_FLAG_DETACHED;
-		THREAD_UNLOCK(state);
-		return NO_ERROR;
-	}
+    /* if it's already dead, then just do what join would have and exit */
+    if (t->state == THREAD_DEATH) {
+        t->flags &= ~THREAD_FLAG_DETACHED; /* makes sure thread_join continues */
+        THREAD_UNLOCK(state);
+        return thread_join(t, NULL, 0);
+    } else {
+        t->flags |= THREAD_FLAG_DETACHED;
+        THREAD_UNLOCK(state);
+        return NO_ERROR;
+    }
 }
 
 /**
@@ -417,114 +397,82 @@ status_t thread_detach(thread_t *t)
  */
 void thread_exit(int retcode)
 {
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(current_thread->magic == THREAD_MAGIC);
-	ASSERT(current_thread->state == THREAD_RUNNING);
-	ASSERT(!thread_is_idle(current_thread));
-#endif
+    DEBUG_ASSERT(current_thread->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
+    DEBUG_ASSERT(!thread_is_idle(current_thread));
 
-//	dprintf("thread_exit: current %p\n", current_thread);
+//  dprintf("thread_exit: current %p\n", current_thread);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	/* enter the dead state */
-	current_thread->state = THREAD_DEATH;
-	current_thread->retcode = retcode;
+    /* enter the dead state */
+    current_thread->state = THREAD_DEATH;
+    current_thread->retcode = retcode;
 
-	/* if we're detached, then do our teardown here */
-	if (current_thread->flags & THREAD_FLAG_DETACHED) {
-		/* remove it from the master thread list */
-		list_delete(&current_thread->thread_list_node);
+    /* if we're detached, then do our teardown here */
+    if (current_thread->flags & THREAD_FLAG_DETACHED) {
+        /* remove it from the master thread list */
+        list_delete(&current_thread->thread_list_node);
 
-		/* clear the structure's magic */
-		current_thread->magic = 0;
+        /* clear the structure's magic */
+        current_thread->magic = 0;
 
-		/* free its stack and the thread structure itself */
-		if (current_thread->flags & THREAD_FLAG_FREE_STACK && current_thread->stack)
-			heap_delayed_free(current_thread->stack);
+        /* free its stack and the thread structure itself */
+        if (current_thread->flags & THREAD_FLAG_FREE_STACK && current_thread->stack) {
+            heap_delayed_free(current_thread->stack);
 
-		if (current_thread->flags & THREAD_FLAG_FREE_STRUCT)
-			heap_delayed_free(current_thread);
-	} else {
-		/* signal if anyone is waiting */
-		wait_queue_wake_all(&current_thread->retcode_wait_queue, false, 0);
-	}
+            /* make sure its not going to get a bounds check performed on the half-freed stack */
+            current_thread->flags &= ~THREAD_FLAG_DEBUG_STACK_BOUNDS_CHECK;
+        }
 
-	/* reschedule */
-	thread_resched();
+        if (current_thread->flags & THREAD_FLAG_FREE_STRUCT)
+            heap_delayed_free(current_thread);
+    } else {
+        /* signal if anyone is waiting */
+        wait_queue_wake_all(&current_thread->retcode_wait_queue, false, 0);
+    }
 
-	panic("somehow fell through thread_exit()\n");
+    /* reschedule */
+    thread_resched();
+
+    panic("somehow fell through thread_exit()\n");
 }
 
 static void idle_thread_routine(void)
 {
-	for (;;)
-		arch_idle();
+    for (;;)
+        arch_idle();
 }
 
-static thread_t *get_top_thread(int cpu, bool unlink)
+static thread_t *get_top_thread(int cpu)
 {
-	thread_t *newthread;
-	uint32_t local_run_queue_bitmap = run_queue_bitmap;
-	uint next_queue;
+    thread_t *newthread;
+    uint32_t local_run_queue_bitmap = run_queue_bitmap;
 
-	while (local_run_queue_bitmap) {
-		/* find the first (remaining) queue with a thread in it */
-		next_queue = HIGHEST_PRIORITY - __builtin_clz(local_run_queue_bitmap)
-			- (sizeof(run_queue_bitmap) * 8 - NUM_PRIORITIES);
+    while (local_run_queue_bitmap) {
+        /* find the first (remaining) queue with a thread in it */
+        uint next_queue = sizeof(run_queue_bitmap) * 8 - 1 - __builtin_clz(local_run_queue_bitmap);
 
-		list_for_every_entry(&run_queue[next_queue], newthread, thread_t, queue_node) {
-			if (newthread->pinned_cpu < 0 || newthread->pinned_cpu == cpu) {
-				if (unlink) {
-					list_delete(&newthread->queue_node);
-
-					if (list_is_empty(&run_queue[next_queue]))
-						run_queue_bitmap &= ~(1<<next_queue);
-				}
-
-				return newthread;
-			}
-		}
-
-		local_run_queue_bitmap &= ~(1<<next_queue);
-	}
-	/* no threads to run, select the idle thread for this cpu */
-	return &idle_threads[cpu];
-}
-
-static void thread_cond_mp_reschedule(thread_t *current_thread, const char *caller)
-{
-	int i;
-	uint best_cpu = ~0U;
-	int best_cpu_priority = INT_MAX;
-	thread_t *t = get_top_thread(-1, false);
-
-	DEBUG_ASSERT(arch_ints_disabled());
-	DEBUG_ASSERT(spin_lock_held(&thread_lock));
-
-	for (i = 0; i < SMP_MAX_CPUS; i++) {
-		if (!(mp.active_cpus & (1 << i)))
-			continue;
-
-		if (cpu_priority[i] < best_cpu_priority) {
-			best_cpu = i;
-			best_cpu_priority = cpu_priority[i];
-		}
-	}
-
-	if (t->priority <= best_cpu_priority)
-		return;
-
-#ifdef DEBUG_THREAD_CPU_WAKE
-	dprintf(ALWAYS, "%s from %s: cpu %d, wake cpu %d, priority %d for priority %d thread (%s), current %d (%s)\n",
-		__func__, caller, arch_curr_cpu_num(), best_cpu, best_cpu_priority,
-		t->priority, t->name,
-		current_thread->priority, current_thread->name);
+        list_for_every_entry(&run_queue[next_queue], newthread, thread_t, queue_node) {
+#if WITH_SMP
+            if (newthread->pinned_cpu < 0 || newthread->pinned_cpu == cpu)
 #endif
-	cpu_priority[best_cpu] = t->priority;
-	mp_reschedule(1UL << best_cpu, 0);
+            {
+                list_delete(&newthread->queue_node);
+
+                if (list_is_empty(&run_queue[next_queue]))
+                    run_queue_bitmap &= ~(1<<next_queue);
+
+                return newthread;
+            }
+        }
+
+        local_run_queue_bitmap &= ~(1<<next_queue);
+    }
+    /* no threads to run, select the idle thread for this cpu */
+    return idle_thread(cpu);
 }
 
 /**
@@ -539,109 +487,131 @@ static void thread_cond_mp_reschedule(thread_t *current_thread, const char *call
  */
 void thread_resched(void)
 {
-	thread_t *oldthread;
-	thread_t *newthread;
+    thread_t *oldthread;
+    thread_t *newthread;
 
-	thread_t *current_thread = get_current_thread();
-	uint cpu = arch_curr_cpu_num();
+    thread_t *current_thread = get_current_thread();
+    uint cpu = arch_curr_cpu_num();
 
-#if THREAD_CHECKS
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-	ASSERT(current_thread->state != THREAD_RUNNING);
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
+    DEBUG_ASSERT(current_thread->state != THREAD_RUNNING);
+
+    THREAD_STATS_INC(reschedules);
+
+    newthread = get_top_thread(cpu);
+
+    DEBUG_ASSERT(newthread);
+
+    newthread->state = THREAD_RUNNING;
+
+    oldthread = current_thread;
+
+    if (newthread == oldthread)
+        return;
+
+    /* set up quantum for the new thread if it was consumed */
+    if (newthread->remaining_quantum <= 0) {
+        newthread->remaining_quantum = 5; // XXX make this smarter
+    }
+
+    /* mark the cpu ownership of the threads */
+    thread_set_curr_cpu(oldthread, -1);
+    thread_set_curr_cpu(newthread, cpu);
+
+#if WITH_SMP
+    if (thread_is_idle(newthread)) {
+        mp_set_cpu_idle(cpu);
+    } else {
+        mp_set_cpu_busy(cpu);
+    }
+
+    if (thread_is_realtime(newthread)) {
+        mp_set_cpu_realtime(cpu);
+    } else {
+        mp_set_cpu_non_realtime(cpu);
+    }
 #endif
-
-	THREAD_STATS_INC(reschedules);
-
-	newthread = get_top_thread(cpu, true);
-
-#if THREAD_CHECKS
-	ASSERT(newthread);
-#endif
-
-	newthread->state = THREAD_RUNNING;
-
-	oldthread = current_thread;
-
-	if (newthread == oldthread)
-		return;
-
-	/* set up quantum for the new thread if it was consumed */
-	if (newthread->remaining_quantum <= 0) {
-		newthread->remaining_quantum = 5; // XXX make this smarter
-	}
-
-	/* mark the cpu ownership of the threads */
-	oldthread->curr_cpu = -1;
-	newthread->curr_cpu = cpu;
-
-	if (thread_is_idle(newthread)) {
-		mp_set_cpu_idle(cpu);
-	} else {
-		mp_set_cpu_busy(cpu);
-	}
-
-	if (thread_is_realtime(newthread)) {
-		mp_set_cpu_realtime(cpu);
-	} else {
-		mp_set_cpu_non_realtime(cpu);
-	}
 
 #if THREAD_STATS
-	THREAD_STATS_INC(context_switches);
+    THREAD_STATS_INC(context_switches);
 
-	if (thread_is_idle(oldthread)) {
-		lk_bigtime_t now = current_time_hires();
-		thread_stats[cpu].idle_time += now - thread_stats[cpu].last_idle_timestamp;
-	}
-	if (thread_is_idle(newthread)) {
-		thread_stats[cpu].last_idle_timestamp = current_time_hires();
-	}
+    if (thread_is_idle(oldthread)) {
+        lk_bigtime_t now = current_time_hires();
+        thread_stats[cpu].idle_time += now - thread_stats[cpu].last_idle_timestamp;
+    }
+    if (thread_is_idle(newthread)) {
+        thread_stats[cpu].last_idle_timestamp = current_time_hires();
+    }
 #endif
 
-	KEVLOG_THREAD_SWITCH(oldthread, newthread);
+    KEVLOG_THREAD_SWITCH(oldthread, newthread);
 
 #if PLATFORM_HAS_DYNAMIC_TIMER
-	if (thread_is_real_time_or_idle(newthread)) {
-		thread_cond_mp_reschedule(newthread, __func__);
-		if (!thread_is_real_time_or_idle(oldthread)) {
-			/* if we're switching from a non real time to a real time, cancel
-			 * the preemption timer. */
-#ifdef DEBUG_THREAD_CONTEXT_SWITCH
-			dprintf(ALWAYS, "arch_context_switch: stop preempt, cpu %d, old %p (%s), new %p (%s)\n",
-				cpu, oldthread, oldthread->name, newthread, newthread->name);
+    if (thread_is_real_time_or_idle(newthread)) {
+        if (!thread_is_real_time_or_idle(oldthread)) {
+            /* if we're switching from a non real time to a real time, cancel
+             * the preemption timer. */
+#if DEBUG_THREAD_CONTEXT_SWITCH
+            dprintf(ALWAYS, "arch_context_switch: stop preempt, cpu %d, old %p (%s), new %p (%s)\n",
+                    cpu, oldthread, oldthread->name, newthread, newthread->name);
 #endif
-			timer_cancel(&preempt_timer[cpu]);
-		}
-	} else if (thread_is_real_time_or_idle(oldthread)) {
-		/* if we're switching from a real time (or idle thread) to a regular one,
-		 * set up a periodic timer to run our preemption tick. */
-#ifdef DEBUG_THREAD_CONTEXT_SWITCH
-		dprintf(ALWAYS, "arch_context_switch: start preempt, cpu %d, old %p (%s), new %p (%s)\n",
-			cpu, oldthread, oldthread->name, newthread, newthread->name);
+            timer_cancel(&preempt_timer[cpu]);
+        }
+    } else if (thread_is_real_time_or_idle(oldthread)) {
+        /* if we're switching from a real time (or idle thread) to a regular one,
+         * set up a periodic timer to run our preemption tick. */
+#if DEBUG_THREAD_CONTEXT_SWITCH
+        dprintf(ALWAYS, "arch_context_switch: start preempt, cpu %d, old %p (%s), new %p (%s)\n",
+                cpu, oldthread, oldthread->name, newthread, newthread->name);
 #endif
-		timer_set_periodic(&preempt_timer[cpu], 10, (timer_callback)thread_timer_tick, NULL);
-	}
+        timer_set_periodic(&preempt_timer[cpu], 10, (timer_callback)thread_timer_tick, NULL);
+    }
 #endif
 
-	/* set some optional target debug leds */
-	target_set_debug_led(0, !thread_is_idle(&idle_threads[cpu]));
+    /* set some optional target debug leds */
+    target_set_debug_led(0, !thread_is_idle(newthread));
 
-	/* do the switch */
-	cpu_priority[cpu] = newthread->priority;
-	set_current_thread(newthread);
+    /* do the switch */
+    set_current_thread(newthread);
 
-#ifdef DEBUG_THREAD_CONTEXT_SWITCH
-	dprintf(ALWAYS, "arch_context_switch: cpu %d, old %p (%s, pri %d, flags 0x%x), new %p (%s, pri %d, flags 0x%x)\n",
-		cpu, oldthread, oldthread->name, oldthread->priority,
-		oldthread->flags, newthread, newthread->name,
-		newthread->priority, newthread->flags);
+#if DEBUG_THREAD_CONTEXT_SWITCH
+    dprintf(ALWAYS, "arch_context_switch: cpu %d, old %p (%s, pri %d, flags 0x%x), new %p (%s, pri %d, flags 0x%x)\n",
+            cpu, oldthread, oldthread->name, oldthread->priority,
+            oldthread->flags, newthread, newthread->name,
+            newthread->priority, newthread->flags);
+#endif
+
+#if THREAD_STACK_BOUNDS_CHECK
+    /* check that the old thread has not blown its stack just before pushing its context */
+    if (oldthread->flags & THREAD_FLAG_DEBUG_STACK_BOUNDS_CHECK) {
+        STATIC_ASSERT((THREAD_STACK_PADDING_SIZE % sizeof(uint32_t)) == 0);
+        uint32_t *s = (uint32_t *)oldthread->stack;
+        for (size_t i = 0; i < THREAD_STACK_PADDING_SIZE / sizeof(uint32_t); i++) {
+            if (unlikely(s[i] != STACK_DEBUG_WORD)) {
+                /* NOTE: will probably blow the stack harder here, but hopefully enough
+                 * state exists to at least get some sort of debugging done.
+                 */
+                panic("stack overrun at %p: thread %p (%s), stack %p\n", &s[i],
+                      oldthread, oldthread->name, oldthread->stack);
+            }
+        }
+    }
 #endif
 
 #ifdef WITH_LIB_UTHREAD
-	uthread_context_switch(oldthread, newthread);
+    uthread_context_switch(oldthread, newthread);
 #endif
-	arch_context_switch(oldthread, newthread);
+
+#if WITH_KERNEL_VM
+    /* see if we need to swap mmu context */
+    if (newthread->aspace != oldthread->aspace) {
+        vmm_context_switch(oldthread->aspace, newthread->aspace);
+    }
+#endif
+
+    /* do the low level context switch */
+    arch_context_switch(oldthread, newthread);
 }
 
 /**
@@ -655,26 +625,24 @@ void thread_resched(void)
  */
 void thread_yield(void)
 {
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(current_thread->magic == THREAD_MAGIC);
-	ASSERT(current_thread->state == THREAD_RUNNING);
-#endif
+    DEBUG_ASSERT(current_thread->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	THREAD_STATS_INC(yields);
+    THREAD_STATS_INC(yields);
 
-	/* we are yielding the cpu, so stick ourselves into the tail of the run queue and reschedule */
-	current_thread->state = THREAD_READY;
-	current_thread->remaining_quantum = 0;
-	if (likely(!thread_is_idle(current_thread))) { /* idle thread doesn't go in the run queue */
-		insert_in_run_queue_tail(current_thread);
-	}
-	thread_resched();
+    /* we are yielding the cpu, so stick ourselves into the tail of the run queue and reschedule */
+    current_thread->state = THREAD_READY;
+    current_thread->remaining_quantum = 0;
+    if (likely(!thread_is_idle(current_thread))) { /* idle thread doesn't go in the run queue */
+        insert_in_run_queue_tail(current_thread);
+    }
+    thread_resched();
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 }
 
 /**
@@ -694,33 +662,31 @@ void thread_yield(void)
  */
 void thread_preempt(void)
 {
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(current_thread->magic == THREAD_MAGIC);
-	ASSERT(current_thread->state == THREAD_RUNNING);
-#endif
+    DEBUG_ASSERT(current_thread->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
 
 #if THREAD_STATS
-	if (!thread_is_idle(current_thread))
-		THREAD_STATS_INC(preempts); /* only track when a meaningful preempt happens */
+    if (!thread_is_idle(current_thread))
+        THREAD_STATS_INC(preempts); /* only track when a meaningful preempt happens */
 #endif
 
-	KEVLOG_THREAD_PREEMPT(current_thread);
+    KEVLOG_THREAD_PREEMPT(current_thread);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	/* we are being preempted, so we get to go back into the front of the run queue if we have quantum left */
-	current_thread->state = THREAD_READY;
-	if (likely(!thread_is_idle(current_thread))) { /* idle thread doesn't go in the run queue */
-		if (current_thread->remaining_quantum > 0)
-			insert_in_run_queue_head(current_thread);
-		else
-			insert_in_run_queue_tail(current_thread); /* if we're out of quantum, go to the tail of the queue */
-	}
-	thread_resched();
+    /* we are being preempted, so we get to go back into the front of the run queue if we have quantum left */
+    current_thread->state = THREAD_READY;
+    if (likely(!thread_is_idle(current_thread))) { /* idle thread doesn't go in the run queue */
+        if (current_thread->remaining_quantum > 0)
+            insert_in_run_queue_head(current_thread);
+        else
+            insert_in_run_queue_tail(current_thread); /* if we're out of quantum, go to the tail of the queue */
+    }
+    thread_resched();
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 }
 
 /**
@@ -735,75 +701,62 @@ void thread_preempt(void)
  */
 void thread_block(void)
 {
-#if THREAD_CHECKS
-	thread_t *current_thread = get_current_thread();
+    __UNUSED thread_t *current_thread = get_current_thread();
 
-	ASSERT(current_thread->magic == THREAD_MAGIC);
-	ASSERT(current_thread->state == THREAD_BLOCKED);
-	ASSERT(spin_lock_held(&thread_lock));
-	ASSERT(!thread_is_idle(current_thread));
-#endif
+    DEBUG_ASSERT(current_thread->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(current_thread->state == THREAD_BLOCKED);
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
+    DEBUG_ASSERT(!thread_is_idle(current_thread));
 
-	/* we are blocking on something. the blocking code should have already stuck us on a queue */
-	thread_resched();
+    /* we are blocking on something. the blocking code should have already stuck us on a queue */
+    thread_resched();
 }
 
 void thread_unblock(thread_t *t, bool resched)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(t->state == THREAD_BLOCKED);
-	ASSERT(spin_lock_held(&thread_lock));
-	ASSERT(!thread_is_idle(t));
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(t->state == THREAD_BLOCKED);
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
+    DEBUG_ASSERT(!thread_is_idle(t));
 
-	t->state = THREAD_READY;
-	insert_in_run_queue_head(t);
-	thread_mp_reschedule(get_current_thread(), t);
-	if (resched)
-		thread_resched();
+    t->state = THREAD_READY;
+    insert_in_run_queue_head(t);
+    mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+    if (resched)
+        thread_resched();
 }
 
 enum handler_return thread_timer_tick(void)
 {
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-	if (thread_is_idle(current_thread))
-		return INT_NO_RESCHEDULE;
+    if (thread_is_real_time_or_idle(current_thread))
+        return INT_NO_RESCHEDULE;
 
-	THREAD_LOCK(state);
-	thread_cond_mp_reschedule(current_thread, __func__);
-	THREAD_UNLOCK(state);
-
-	if (thread_is_real_time_or_idle(current_thread))
-		return INT_NO_RESCHEDULE;
-
-	current_thread->remaining_quantum--;
-	if (current_thread->remaining_quantum <= 0) {
-		return INT_RESCHEDULE;
-	} else {
-		return INT_NO_RESCHEDULE;
-	}
+    current_thread->remaining_quantum--;
+    if (current_thread->remaining_quantum <= 0) {
+        return INT_RESCHEDULE;
+    } else {
+        return INT_NO_RESCHEDULE;
+    }
 }
 
 /* timer callback to wake up a sleeping thread */
 static enum handler_return thread_sleep_handler(timer_t *timer, lk_time_t now, void *arg)
 {
-	thread_t *t = (thread_t *)arg;
+    thread_t *t = (thread_t *)arg;
 
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(t->state == THREAD_SLEEPING);
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(t->state == THREAD_SLEEPING);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	t->state = THREAD_READY;
-	insert_in_run_queue_head(t);
+    t->state = THREAD_READY;
+    insert_in_run_queue_head(t);
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 
-	return INT_RESCHEDULE;
+    return INT_RESCHEDULE;
 }
 
 /**
@@ -818,23 +771,21 @@ static enum handler_return thread_sleep_handler(timer_t *timer, lk_time_t now, v
  */
 void thread_sleep(lk_time_t delay)
 {
-	timer_t timer;
+    timer_t timer;
 
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(current_thread->magic == THREAD_MAGIC);
-	ASSERT(current_thread->state == THREAD_RUNNING);
-	ASSERT(!thread_is_idle(current_thread));
-#endif
+    DEBUG_ASSERT(current_thread->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
+    DEBUG_ASSERT(!thread_is_idle(current_thread));
 
-	timer_initialize(&timer);
+    timer_initialize(&timer);
 
-	THREAD_LOCK(state);
-	timer_set_oneshot(&timer, delay, thread_sleep_handler, (void *)current_thread);
-	current_thread->state = THREAD_SLEEPING;
-	thread_resched();
-	THREAD_UNLOCK(state);
+    THREAD_LOCK(state);
+    timer_set_oneshot(&timer, delay, thread_sleep_handler, (void *)current_thread);
+    current_thread->state = THREAD_SLEEPING;
+    thread_resched();
+    THREAD_UNLOCK(state);
 }
 
 /**
@@ -844,31 +795,30 @@ void thread_sleep(lk_time_t delay)
  */
 void thread_init_early(void)
 {
-	int i;
+    int i;
 
-	DEBUG_ASSERT(arch_curr_cpu_num() == 0);
+    DEBUG_ASSERT(arch_curr_cpu_num() == 0);
 
-	/* initialize the run queues */
-	for (i=0; i < NUM_PRIORITIES; i++)
-		list_initialize(&run_queue[i]);
+    /* initialize the run queues */
+    for (i=0; i < NUM_PRIORITIES; i++)
+        list_initialize(&run_queue[i]);
 
-	/* initialize the thread list */
-	list_initialize(&thread_list);
+    /* initialize the thread list */
+    list_initialize(&thread_list);
 
-	/* create a thread to cover the current running state */
-	thread_t *t = &idle_threads[0];
-	init_thread_struct(t, "bootstrap");
+    /* create a thread to cover the current running state */
+    thread_t *t = idle_thread(0);
+    init_thread_struct(t, "bootstrap");
 
-	/* half construct this thread, since we're already running */
-	t->priority = HIGHEST_PRIORITY;
-	t->state = THREAD_RUNNING;
-	t->flags = THREAD_FLAG_DETACHED;
-	t->curr_cpu = 0;
-	t->pinned_cpu = 0;
-	wait_queue_init(&t->retcode_wait_queue);
-	list_add_head(&thread_list, &t->thread_list_node);
-	cpu_priority[0] = t->priority;
-	set_current_thread(t);
+    /* half construct this thread, since we're already running */
+    t->priority = HIGHEST_PRIORITY;
+    t->state = THREAD_RUNNING;
+    t->flags = THREAD_FLAG_DETACHED;
+    thread_set_curr_cpu(t, 0);
+    thread_set_pinned_cpu(t, 0);
+    wait_queue_init(&t->retcode_wait_queue);
+    list_add_head(&thread_list, &t->thread_list_node);
+    set_current_thread(t);
 }
 
 /**
@@ -879,9 +829,9 @@ void thread_init_early(void)
 void thread_init(void)
 {
 #if PLATFORM_HAS_DYNAMIC_TIMER
-	for (uint i = 0; i < SMP_MAX_CPUS; i++) {
-		timer_initialize(&preempt_timer[i]);
-	}
+    for (uint i = 0; i < SMP_MAX_CPUS; i++) {
+        timer_initialize(&preempt_timer[i]);
+    }
 #endif
 }
 
@@ -890,8 +840,8 @@ void thread_init(void)
  */
 void thread_set_name(const char *name)
 {
-	thread_t *current_thread = get_current_thread();
-	strlcpy(current_thread->name, name, sizeof(current_thread->name));
+    thread_t *current_thread = get_current_thread();
+    strlcpy(current_thread->name, name, sizeof(current_thread->name));
 }
 
 /**
@@ -901,21 +851,21 @@ void thread_set_name(const char *name)
  */
 void thread_set_priority(int priority)
 {
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	if (priority <= IDLE_PRIORITY)
-		priority = IDLE_PRIORITY + 1;
-	if (priority > HIGHEST_PRIORITY)
-		priority = HIGHEST_PRIORITY;
-	current_thread->priority = priority;
+    if (priority <= IDLE_PRIORITY)
+        priority = IDLE_PRIORITY + 1;
+    if (priority > HIGHEST_PRIORITY)
+        priority = HIGHEST_PRIORITY;
+    current_thread->priority = priority;
 
-	current_thread->state = THREAD_READY;
-	insert_in_run_queue_head(current_thread);
-	thread_resched();
+    current_thread->state = THREAD_READY;
+    insert_in_run_queue_head(current_thread);
+    thread_resched();
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 }
 
 /**
@@ -927,108 +877,151 @@ void thread_set_priority(int priority)
  */
 void thread_become_idle(void)
 {
-	DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(arch_ints_disabled());
 
-	thread_t *t = get_current_thread();
+    thread_t *t = get_current_thread();
 
-	char name[16];
-	snprintf(name, sizeof(name), "idle %d", arch_curr_cpu_num());
-	thread_set_name(name);
+#if WITH_SMP
+    char name[16];
+    snprintf(name, sizeof(name), "idle %d", arch_curr_cpu_num());
+    thread_set_name(name);
+#else
+    thread_set_name("idle");
+#endif
 
-	/* mark ourself as idle */
-	t->priority = IDLE_PRIORITY;
-	t->flags |= THREAD_FLAG_IDLE;
-	t->pinned_cpu = arch_curr_cpu_num();
+    /* mark ourself as idle */
+    t->priority = IDLE_PRIORITY;
+    t->flags |= THREAD_FLAG_IDLE;
+    thread_set_pinned_cpu(t, arch_curr_cpu_num());
 
-	mp_set_curr_cpu_active(true);
-	mp_set_cpu_idle(arch_curr_cpu_num());
+    mp_set_curr_cpu_active(true);
+    mp_set_cpu_idle(arch_curr_cpu_num());
 
-	/* enable interrupts and start the scheduler */
-	arch_enable_ints();
-	thread_yield();
+    /* enable interrupts and start the scheduler */
+    arch_enable_ints();
+    thread_yield();
 
-	idle_thread_routine();
+    idle_thread_routine();
 }
 
 /* create an idle thread for the cpu we're on, and start scheduling */
 
 void thread_secondary_cpu_init_early(void)
 {
-	DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(arch_ints_disabled());
 
-	/* construct an idle thread to cover our cpu */
-	uint cpu = arch_curr_cpu_num();
-	thread_t *t = &idle_threads[cpu];
+    /* construct an idle thread to cover our cpu */
+    uint cpu = arch_curr_cpu_num();
+    thread_t *t = idle_thread(cpu);
 
-	char name[16];
-	snprintf(name, sizeof(name), "idle %d", cpu);
-	init_thread_struct(t, name);
-	t->pinned_cpu = cpu;
+    char name[16];
+    snprintf(name, sizeof(name), "idle %u", cpu);
+    init_thread_struct(t, name);
+    thread_set_pinned_cpu(t, cpu);
 
-	/* half construct this thread, since we're already running */
-	t->priority = HIGHEST_PRIORITY;
-	t->state = THREAD_RUNNING;
-	t->flags = THREAD_FLAG_DETACHED | THREAD_FLAG_IDLE;
-	t->curr_cpu = cpu;
-	t->pinned_cpu = cpu;
-	wait_queue_init(&t->retcode_wait_queue);
+    /* half construct this thread, since we're already running */
+    t->priority = HIGHEST_PRIORITY;
+    t->state = THREAD_RUNNING;
+    t->flags = THREAD_FLAG_DETACHED | THREAD_FLAG_IDLE;
+    thread_set_curr_cpu(t, cpu);
+    thread_set_pinned_cpu(t, cpu);
+    wait_queue_init(&t->retcode_wait_queue);
 
-	THREAD_LOCK(state);
+    THREAD_LOCK(state);
 
-	list_add_head(&thread_list, &t->thread_list_node);
-	cpu_priority[cpu] = t->priority;
-	set_current_thread(t);
+    list_add_head(&thread_list, &t->thread_list_node);
+    set_current_thread(t);
 
-	THREAD_UNLOCK(state);
+    THREAD_UNLOCK(state);
 }
 
 void thread_secondary_cpu_entry(void)
 {
-	uint cpu = arch_curr_cpu_num();
-	thread_t *t = get_current_thread();
-	t->priority = IDLE_PRIORITY;
+    uint cpu = arch_curr_cpu_num();
+    thread_t *t = get_current_thread();
+    t->priority = IDLE_PRIORITY;
 
-	mp_set_curr_cpu_active(true);
-	mp_set_cpu_idle(cpu);
+    mp_set_curr_cpu_active(true);
+    mp_set_cpu_idle(cpu);
 
-	/* enable interrupts and start the scheduler on this cpu */
-	arch_enable_ints();
-	thread_yield();
+    /* enable interrupts and start the scheduler on this cpu */
+    arch_enable_ints();
+    thread_yield();
 
-	idle_thread_routine();
+    idle_thread_routine();
 }
 
 static const char *thread_state_to_str(enum thread_state state)
 {
-	switch (state) {
-		case THREAD_SUSPENDED: return "susp";
-		case THREAD_READY: return "rdy";
-		case THREAD_RUNNING: return "run";
-		case THREAD_BLOCKED: return "blok";
-		case THREAD_SLEEPING: return "slep";
-		case THREAD_DEATH: return "deth";
-		default: return "unkn";
-	}
+    switch (state) {
+        case THREAD_SUSPENDED:
+            return "susp";
+        case THREAD_READY:
+            return "rdy";
+        case THREAD_RUNNING:
+            return "run";
+        case THREAD_BLOCKED:
+            return "blok";
+        case THREAD_SLEEPING:
+            return "slep";
+        case THREAD_DEATH:
+            return "deth";
+        default:
+            return "unkn";
+    }
 }
 
+static size_t thread_stack_used(thread_t *t) {
+#ifdef THREAD_STACK_HIGHWATER
+    uint8_t *stack_base;
+    size_t stack_size;
+    size_t i;
+
+    stack_base = t->stack;
+    stack_size = t->stack_size;
+
+    for (i = 0; i < stack_size; i++) {
+        if (stack_base[i] != STACK_DEBUG_BYTE)
+            break;
+    }
+    return stack_size - i;
+#else
+    return 0;
+#endif
+}
 /**
  * @brief  Dump debugging info about the specified thread.
  */
 void dump_thread(thread_t *t)
 {
-	dprintf(INFO, "dump_thread: t %p (%s)\n", t, t->name);
-	dprintf(INFO, "\tstate %s, curr_cpu %d, pinned_cpu %d, priority %d, remaining quantum %d\n",
-				  thread_state_to_str(t->state), t->curr_cpu, t->pinned_cpu, t->priority, t->remaining_quantum);
-	dprintf(INFO, "\tstack %p, stack_size %zd\n", t->stack, t->stack_size);
-	dprintf(INFO, "\tentry %p, arg %p, flags 0x%x\n", t->entry, t->arg, t->flags);
-	dprintf(INFO, "\twait queue %p, wait queue ret %d\n", t->blocking_wait_queue, t->wait_queue_block_ret);
-	dprintf(INFO, "\ttls:");
-	int i;
-	for (i=0; i < MAX_TLS_ENTRY; i++) {
-		dprintf(INFO, " 0x%lx", t->tls[i]);
-	}
-	dprintf(INFO, "\n");
-	arch_dump_thread(t);
+    dprintf(INFO, "dump_thread: t %p (%s)\n", t, t->name);
+#if WITH_SMP
+    dprintf(INFO, "\tstate %s, curr_cpu %d, pinned_cpu %d, priority %d, remaining quantum %d\n",
+            thread_state_to_str(t->state), t->curr_cpu, t->pinned_cpu, t->priority, t->remaining_quantum);
+#else
+    dprintf(INFO, "\tstate %s, priority %d, remaining quantum %d\n",
+            thread_state_to_str(t->state), t->priority, t->remaining_quantum);
+#endif
+#ifdef THREAD_STACK_HIGHWATER
+    dprintf(INFO, "\tstack %p, stack_size %zd, stack_used %zd\n",
+            t->stack, t->stack_size, thread_stack_used(t));
+#else
+    dprintf(INFO, "\tstack %p, stack_size %zd\n", t->stack, t->stack_size);
+#endif
+    dprintf(INFO, "\tentry %p, arg %p, flags 0x%x\n", t->entry, t->arg, t->flags);
+    dprintf(INFO, "\twait queue %p, wait queue ret %d\n", t->blocking_wait_queue, t->wait_queue_block_ret);
+#if WITH_KERNEL_VM
+    dprintf(INFO, "\taspace %p\n", t->aspace);
+#endif
+#if (MAX_TLS_ENTRY > 0)
+    dprintf(INFO, "\ttls:");
+    int i;
+    for (i=0; i < MAX_TLS_ENTRY; i++) {
+        dprintf(INFO, " 0x%lx", t->tls[i]);
+    }
+    dprintf(INFO, "\n");
+#endif
+    arch_dump_thread(t);
 }
 
 /**
@@ -1036,13 +1029,18 @@ void dump_thread(thread_t *t)
  */
 void dump_all_threads(void)
 {
-	thread_t *t;
+    thread_t *t;
 
-	THREAD_LOCK(state);
-	list_for_every_entry(&thread_list, t, thread_t, thread_list_node) {
-		dump_thread(t);
-	}
-	THREAD_UNLOCK(state);
+    THREAD_LOCK(state);
+    list_for_every_entry(&thread_list, t, thread_t, thread_list_node) {
+        if (t->magic != THREAD_MAGIC) {
+            dprintf(INFO, "bad magic on thread struct %p, aborting.\n", t);
+            hexdump(t, sizeof(thread_t));
+            break;
+        }
+        dump_thread(t);
+    }
+    THREAD_UNLOCK(state);
 }
 
 /** @} */
@@ -1054,27 +1052,25 @@ void dump_all_threads(void)
  */
 void wait_queue_init(wait_queue_t *wait)
 {
-	*wait = (wait_queue_t)WAIT_QUEUE_INITIAL_VALUE(*wait);
+    *wait = (wait_queue_t)WAIT_QUEUE_INITIAL_VALUE(*wait);
 }
 
 static enum handler_return wait_queue_timeout_handler(timer_t *timer, lk_time_t now, void *arg)
 {
-	thread_t *thread = (thread_t *)arg;
+    thread_t *thread = (thread_t *)arg;
 
-#if THREAD_CHECKS
-	ASSERT(thread->magic == THREAD_MAGIC);
-#endif
+    DEBUG_ASSERT(thread->magic == THREAD_MAGIC);
 
-	spin_lock(&thread_lock);
+    spin_lock(&thread_lock);
 
-	enum handler_return ret = INT_NO_RESCHEDULE;
-	if (thread_unblock_from_wait_queue(thread, ERR_TIMED_OUT) >= NO_ERROR) {
-		ret = INT_RESCHEDULE;
-	}
+    enum handler_return ret = INT_NO_RESCHEDULE;
+    if (thread_unblock_from_wait_queue(thread, ERR_TIMED_OUT) >= NO_ERROR) {
+        ret = INT_RESCHEDULE;
+    }
 
-	spin_unlock(&thread_lock);
+    spin_unlock(&thread_lock);
 
-	return ret;
+    return ret;
 }
 
 /**
@@ -1097,40 +1093,38 @@ static enum handler_return wait_queue_timeout_handler(timer_t *timer, lk_time_t 
  */
 status_t wait_queue_block(wait_queue_t *wait, lk_time_t timeout)
 {
-	timer_t timer;
+    timer_t timer;
 
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
-	ASSERT(current_thread->state == THREAD_RUNNING);
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
+    DEBUG_ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
+    DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
 
-	if (timeout == 0)
-		return ERR_TIMED_OUT;
+    if (timeout == 0)
+        return ERR_TIMED_OUT;
 
-	list_add_tail(&wait->list, &current_thread->queue_node);
-	wait->count++;
-	current_thread->state = THREAD_BLOCKED;
-	current_thread->blocking_wait_queue = wait;
-	current_thread->wait_queue_block_ret = NO_ERROR;
+    list_add_tail(&wait->list, &current_thread->queue_node);
+    wait->count++;
+    current_thread->state = THREAD_BLOCKED;
+    current_thread->blocking_wait_queue = wait;
+    current_thread->wait_queue_block_ret = NO_ERROR;
 
-	/* if the timeout is nonzero or noninfinite, set a callback to yank us out of the queue */
-	if (timeout != INFINITE_TIME) {
-		timer_initialize(&timer);
-		timer_set_oneshot(&timer, timeout, wait_queue_timeout_handler, (void *)current_thread);
-	}
+    /* if the timeout is nonzero or noninfinite, set a callback to yank us out of the queue */
+    if (timeout != INFINITE_TIME) {
+        timer_initialize(&timer);
+        timer_set_oneshot(&timer, timeout, wait_queue_timeout_handler, (void *)current_thread);
+    }
 
-	thread_resched();
+    thread_resched();
 
-	/* we don't really know if the timer fired or not, so it's better safe to try to cancel it */
-	if (timeout != INFINITE_TIME) {
-		timer_cancel(&timer);
-	}
+    /* we don't really know if the timer fired or not, so it's better safe to try to cancel it */
+    if (timeout != INFINITE_TIME) {
+        timer_cancel(&timer);
+    }
 
-	return current_thread->wait_queue_block_ret;
+    return current_thread->wait_queue_block_ret;
 }
 
 /**
@@ -1149,45 +1143,41 @@ status_t wait_queue_block(wait_queue_t *wait, lk_time_t timeout)
  */
 int wait_queue_wake_one(wait_queue_t *wait, bool reschedule, status_t wait_queue_error)
 {
-	thread_t *t;
-	int ret = 0;
+    thread_t *t;
+    int ret = 0;
 
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
+    DEBUG_ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
 
-	t = list_remove_head_type(&wait->list, thread_t, queue_node);
-	if (t) {
-		wait->count--;
-#if THREAD_CHECKS
-		ASSERT(t->state == THREAD_BLOCKED);
-#endif
-		t->state = THREAD_READY;
-		t->wait_queue_block_ret = wait_queue_error;
-		t->blocking_wait_queue = NULL;
+    t = list_remove_head_type(&wait->list, thread_t, queue_node);
+    if (t) {
+        wait->count--;
+        DEBUG_ASSERT(t->state == THREAD_BLOCKED);
+        t->state = THREAD_READY;
+        t->wait_queue_block_ret = wait_queue_error;
+        t->blocking_wait_queue = NULL;
 
-		/* if we're instructed to reschedule, stick the current thread on the head
-		 * of the run queue first, so that the newly awakened thread gets a chance to run
-		 * before the current one, but the current one doesn't get unnecessarilly punished.
-		 */
-		if (reschedule) {
-			current_thread->state = THREAD_READY;
-			insert_in_run_queue_head(current_thread);
-		}
-		insert_in_run_queue_head(t);
-		thread_mp_reschedule(current_thread, t);
-		if (reschedule) {
-			thread_resched();
-		}
-		ret = 1;
+        /* if we're instructed to reschedule, stick the current thread on the head
+         * of the run queue first, so that the newly awakened thread gets a chance to run
+         * before the current one, but the current one doesn't get unnecessarilly punished.
+         */
+        if (reschedule) {
+            current_thread->state = THREAD_READY;
+            insert_in_run_queue_head(current_thread);
+        }
+        insert_in_run_queue_head(t);
+        mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+        if (reschedule) {
+            thread_resched();
+        }
+        ret = 1;
 
-	}
+    }
 
-	return ret;
+    return ret;
 }
 
 
@@ -1207,54 +1197,46 @@ int wait_queue_wake_one(wait_queue_t *wait, bool reschedule, status_t wait_queue
  */
 int wait_queue_wake_all(wait_queue_t *wait, bool reschedule, status_t wait_queue_error)
 {
-	thread_t *t;
-	int ret = 0;
-	mp_cpu_mask_t mp_reschedule_target = 0;
+    thread_t *t;
+    int ret = 0;
 
-	thread_t *current_thread = get_current_thread();
+    thread_t *current_thread = get_current_thread();
 
-#if THREAD_CHECKS
-	ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
+    DEBUG_ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
 
-	if (reschedule && wait->count > 0) {
-		/* if we're instructed to reschedule, stick the current thread on the head
-		 * of the run queue first, so that the newly awakened threads get a chance to run
-		 * before the current one, but the current one doesn't get unnecessarilly punished.
-		 */
-		current_thread->state = THREAD_READY;
-		insert_in_run_queue_head(current_thread);
-	}
+    if (reschedule && wait->count > 0) {
+        /* if we're instructed to reschedule, stick the current thread on the head
+         * of the run queue first, so that the newly awakened threads get a chance to run
+         * before the current one, but the current one doesn't get unnecessarilly punished.
+         */
+        current_thread->state = THREAD_READY;
+        insert_in_run_queue_head(current_thread);
+    }
 
-	/* pop all the threads off the wait queue into the run queue */
-	while ((t = list_remove_head_type(&wait->list, thread_t, queue_node))) {
-		wait->count--;
-#if THREAD_CHECKS
-		ASSERT(t->state == THREAD_BLOCKED);
-#endif
-		t->state = THREAD_READY;
-		t->wait_queue_block_ret = wait_queue_error;
-		t->blocking_wait_queue = NULL;
+    /* pop all the threads off the wait queue into the run queue */
+    while ((t = list_remove_head_type(&wait->list, thread_t, queue_node))) {
+        wait->count--;
+        DEBUG_ASSERT(t->state == THREAD_BLOCKED);
+        t->state = THREAD_READY;
+        t->wait_queue_block_ret = wait_queue_error;
+        t->blocking_wait_queue = NULL;
 
-		insert_in_run_queue_head(t);
-		mp_reschedule_target |= thread_get_mp_reschedule_target(current_thread, t);
-		ret++;
-	}
+        insert_in_run_queue_head(t);
+        ret++;
+    }
 
-#if THREAD_CHECKS
-	ASSERT(wait->count == 0);
-#endif
+    DEBUG_ASSERT(wait->count == 0);
 
-	if (ret > 0) {
-		mp_reschedule(mp_reschedule_target, 0);
-		if (reschedule) {
-			thread_resched();
-		}
-	}
+    if (ret > 0) {
+        mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
+        if (reschedule) {
+            thread_resched();
+        }
+    }
 
-	return ret;
+    return ret;
 }
 
 /**
@@ -1264,13 +1246,12 @@ int wait_queue_wake_all(wait_queue_t *wait, bool reschedule, status_t wait_queue
  */
 void wait_queue_destroy(wait_queue_t *wait, bool reschedule)
 {
-#if THREAD_CHECKS
-	ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
-	wait_queue_wake_all(wait, reschedule, ERR_OBJECT_DESTROYED);
-	wait->magic = 0;
+    DEBUG_ASSERT(wait->magic == WAIT_QUEUE_MAGIC);
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
+
+    wait_queue_wake_all(wait, reschedule, ERR_OBJECT_DESTROYED);
+    wait->magic = 0;
 }
 
 /**
@@ -1287,31 +1268,54 @@ void wait_queue_destroy(wait_queue_t *wait, bool reschedule)
  */
 status_t thread_unblock_from_wait_queue(thread_t *t, status_t wait_queue_error)
 {
-#if THREAD_CHECKS
-	ASSERT(t->magic == THREAD_MAGIC);
-	ASSERT(arch_ints_disabled());
-	ASSERT(spin_lock_held(&thread_lock));
-#endif
+    DEBUG_ASSERT(t->magic == THREAD_MAGIC);
+    DEBUG_ASSERT(arch_ints_disabled());
+    DEBUG_ASSERT(spin_lock_held(&thread_lock));
 
-	if (t->state != THREAD_BLOCKED)
-		return ERR_NOT_BLOCKED;
+    if (t->state != THREAD_BLOCKED)
+        return ERR_NOT_BLOCKED;
 
-#if THREAD_CHECKS
-	ASSERT(t->blocking_wait_queue != NULL);
-	ASSERT(t->blocking_wait_queue->magic == WAIT_QUEUE_MAGIC);
-	ASSERT(list_in_list(&t->queue_node));
-#endif
+    DEBUG_ASSERT(t->blocking_wait_queue != NULL);
+    DEBUG_ASSERT(t->blocking_wait_queue->magic == WAIT_QUEUE_MAGIC);
+    DEBUG_ASSERT(list_in_list(&t->queue_node));
 
-	list_delete(&t->queue_node);
-	t->blocking_wait_queue->count--;
-	t->blocking_wait_queue = NULL;
-	t->state = THREAD_READY;
-	t->wait_queue_block_ret = wait_queue_error;
-	insert_in_run_queue_head(t);
-	thread_mp_reschedule(get_current_thread(), t);
+    list_delete(&t->queue_node);
+    t->blocking_wait_queue->count--;
+    t->blocking_wait_queue = NULL;
+    t->state = THREAD_READY;
+    t->wait_queue_block_ret = wait_queue_error;
+    insert_in_run_queue_head(t);
+    mp_reschedule(MP_CPU_ALL_BUT_LOCAL, 0);
 
-	return NO_ERROR;
+    return NO_ERROR;
 }
 
-/* vim: set ts=4 sw=4 noexpandtab: */
-
+#if defined(WITH_DEBUGGER_INFO)
+// This is, by necessity, arch-specific, and arm-m specific right now,
+// but lives here due to thread_list being static.
+//
+// It contains sufficient information for a remote debugger to walk
+// the thread list without needing the symbols and debug sections in
+// the elf binary for lk or the ability to parse them.
+const struct __debugger_info__ {
+    u32 version; // flags:16 major:8 minor:8
+    void *thread_list_ptr;
+    void *current_thread_ptr;
+    u8 off_list_node;
+    u8 off_state;
+    u8 off_saved_sp;
+    u8 off_was_preempted;
+    u8 off_name;
+    u8 off_waitq;
+} _debugger_info = {
+    .version = 0x0100,
+    .thread_list_ptr = &thread_list,
+    .current_thread_ptr = &_current_thread,
+    .off_list_node = __builtin_offsetof(thread_t, thread_list_node),
+    .off_state = __builtin_offsetof(thread_t, state),
+    .off_saved_sp = __builtin_offsetof(thread_t, arch.sp),
+    .off_was_preempted = __builtin_offsetof(thread_t, arch.was_preempted),
+    .off_name = __builtin_offsetof(thread_t, name),
+    .off_waitq = __builtin_offsetof(thread_t, blocking_wait_queue),
+};
+#endif
