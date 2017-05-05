@@ -70,20 +70,6 @@ static void call_constructors(void)
 		ctor++;
 	}
 }
-#if 1
-#define TRUSTY_VMCALL_PRINT 0x74727509
-void my_vmcall(uint32_t mark)
-{
-//	uint32_t hi = (mark>>32)& ((1<<32) -1);
-//	uint32_t low = mark & ((1<<32) -1);
-    __asm__ __volatile__(
-		"vmcall;"
-            ::"a"(TRUSTY_VMCALL_PRINT),"b"(mark)
-            );
-
-}
-
-#endif
 
 /* called from arch code */
 void lk_main(ulong arg0, ulong arg1, ulong arg2, ulong arg3)

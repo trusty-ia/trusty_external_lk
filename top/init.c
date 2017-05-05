@@ -47,7 +47,6 @@
 
 extern const struct lk_init_struct __lk_init[];
 extern const struct lk_init_struct __lk_init_end[];
-void my_vmcall(uint32_t mark);
 
 void lk_init_level(enum lk_init_flags required_flag, uint start_level, uint stop_level)
 {
@@ -104,9 +103,7 @@ void lk_init_level(enum lk_init_flags required_flag, uint start_level, uint stop
                    arch_curr_cpu_num(), found->hook, found->name, found->level, found->flags);
         }
 #endif
-		
         found->hook(found->level);
-
         last_called_level = found->level;
         last = found;
     }

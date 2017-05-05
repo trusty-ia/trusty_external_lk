@@ -78,7 +78,7 @@ void arch_init(void)
 
 void *get_system_selector(seg_sel_t sel)
 {
-	return (sel==TSS_SELECTOR)?(void *)&system_tss:NULL;
+    return (sel==TSS_SELECTOR)?(void *)&system_tss:NULL;
 }
 
 void arch_chain_load(void *entry, ulong arg0, ulong arg1, ulong arg2, ulong arg3)

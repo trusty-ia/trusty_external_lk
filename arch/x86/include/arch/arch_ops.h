@@ -86,18 +86,18 @@ static inline int atomic_or(volatile int *ptr, long val) { return _atomic_or(ptr
 static inline int atomic_cmpxchg(volatile int *ptr, int oldval, uint64_t newval)
 {
 #if USE_GCC_ATOMICS
-	__atomic_compare_exchange_n(ptr, &oldval, newval, false,
-                  __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    __atomic_compare_exchange_n(ptr, &oldval, newval, false,
+            __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 
 #else
-	__asm__ volatile(
-		"lock cmpxchgq  %[newval], %[ptr];"
-		: "=a" (oldval),  "=m" (*ptr)
-		: "a" (oldval), [newval]"r" (newval), [ptr]"m" (*ptr)
-		: "memory"
-	);
+    __asm__ volatile(
+        "lock cmpxchgq  %[newval], %[ptr];"
+        : "=a" (oldval),  "=m" (*ptr)
+        : "a" (oldval), [newval]"r" (newval), [ptr]"m" (*ptr)
+        : "memory"
+    );
 #endif
-	return oldval;
+    return oldval;
 }
 #endif
 
@@ -108,9 +108,6 @@ static inline uint32_t arch_cycle_count(void)
 
     return timestamp;
 }
-
-/* use a global pointer to store the current_thread */
-//extern struct thread *_current_thread;
 
 struct thread *get_current_thread(void);
 

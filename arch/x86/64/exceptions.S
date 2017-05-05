@@ -38,24 +38,22 @@ _isr:
 .set isr_stub_start, .
 
 .if i == 8 || (i >= 10 && i <= 14) || i == 17
-        nop                                     /* error code pushed by exception */
-        nop                                     /* 2 nops are the same length as push byte */
-        pushq $i                                /* interrupt number */
-.if i < 0x80
+    nop                                     /* error code pushed by exception */
+    nop                                     /* 2 nops are the same length as push byte */
+    pushq $i                                /* interrupt number */
     nop            /* i>=0x80, pushq $i occupies 5 bytes compare to 2 bytes if i<0x80 */
     nop            /* need to add 3 nops to fill the gap */
     nop            /* to make sure isr_stub_len correct for each intr */
-.endif
         jmp interrupt_common
 .else
-        pushq $0                                /* fill in error code in iframe */
-        pushq $i                                /* interrupt number */
+    pushq $0                                /* fill in error code in iframe */
+    pushq $i                                /* interrupt number */
 .if i < 0x80
     nop            /* i>=0x80, pushq $i occupies 5 bytes compare to 2 bytes if i<0x80 */
     nop            /* need to add 3 nops to fill the gap */
     nop            /* to make sure isr_stub_len correct for each intr */
 .endif
-        jmp interrupt_common
+    jmp interrupt_common
 .endif
 
 /* figure out the length of a single isr stub (usually 6 or 9 bytes) */
