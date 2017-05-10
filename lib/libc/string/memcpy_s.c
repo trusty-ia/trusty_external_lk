@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Corey Tabaka
+ * Copyright (c) 2017 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,18 +20,22 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <asm.h>
+#include <string.h>
+#include <sys/types.h>
+#include <err.h>
 
-/* TODO: */
+status_t memcpy_s(void *dest, size_t dest_size, const void *src, size_t count)
+{
+    if ((NULL == dest) || (NULL == src))
+        return ERR_NOT_VALID;
 
-.text
-.align 2
+    if (0 == count)
+        return NO_ERROR;
 
-/* void bzero(void *s, size_t n); */
-FUNCTION(bzero)
-	ret
+    if (dest_size < count)
+        return ERR_OUT_OF_RANGE;
 
-/* void *memset(void *s, int c, size_t n); */
-FUNCTION(memset)
-	ret
+    memcpy(dest, src, count);
 
+    return NO_ERROR;
+}

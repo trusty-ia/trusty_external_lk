@@ -25,12 +25,14 @@
 
 #include <stddef.h>
 #include <compiler.h>
+#include <sys/types.h>
 
 __BEGIN_CDECLS
 
 void *memchr (void const *, int, size_t) __PURE;
 int   memcmp (void const *, const void *, size_t) __PURE;
 void *memcpy (void *, void const *, size_t);
+status_t memcpy_s(void *, size_t, const void *, size_t);
 void *memmove(void *, void const *, size_t);
 void *memset (void *, int, size_t);
 
