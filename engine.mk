@@ -172,7 +172,6 @@ GLOBAL_DEFINES += $(EXTERNAL_DEFINES)
 $(info EXTERNAL_DEFINES = $(EXTERNAL_DEFINES))
 endif
 
-
 # prefix all of the paths in GLOBAL_INCLUDES with -I
 GLOBAL_INCLUDES := $(addprefix -I,$(GLOBAL_INCLUDES))
 

@@ -283,6 +283,22 @@ highaddr:
 
     /* reload the gdtr */
     lgdt _gdtr
+
+#ifdef STACK_PROTECTOR
+    /* setup the random value of stack check guard before C call.
+     * the rdrand call fails sometimes, so there given 10 loops.
+     * if rdrand call fails 10 times, it will jump to dead loop.
+     */
+    mov $10, %edx
+1:
+    rdrand %rax
+    jc 2f            #jump short if carry (CF=1)
+    decl %edx
+    jnz 1b
+    jz 0f
+2:  mov %rax, __stack_chk_guard(%rip)
+#endif
+
     /* set up the idt */
     call setup_idt
 

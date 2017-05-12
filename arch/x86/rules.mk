@@ -50,11 +50,16 @@ MODULE_SRCS += \
 	$(SUBARCH_DIR)/ops.S \
 	$(LOCAL_DIR)/arch.c \
 	$(LOCAL_DIR)/cache.c \
+	$(LOCAL_DIR)/faults.c \
 	$(LOCAL_DIR)/gdt.S \
 	$(LOCAL_DIR)/thread.c \
-	$(LOCAL_DIR)/faults.c \
 	$(LOCAL_DIR)/descriptor.c \
 	$(LOCAL_DIR)/fpu.c
+
+ifeq (true,$(call TOBOOL,$(STACK_PROTECTOR)))
+MODULE_SRCS += \
+	$(LOCAL_DIR)/stack_chk.c
+endif
 
 include $(LOCAL_DIR)/toolchain.mk
 
@@ -80,8 +85,13 @@ LIBGCC := $(shell $(TOOLCHAIN_PREFIX)gcc $(CFLAGS) -print-libgcc-file-name)
 cc-option = $(shell if test -z "`$(1) $(2) -S -o /dev/null -xc /dev/null 2>&1`"; \
 	then echo "$(2)"; else echo "$(3)"; fi ;)
 
-# disable SSP if the compiler supports it; it will break stuff
-GLOBAL_CFLAGS += $(call cc-option,$(CC),-fno-stack-protector,)
+ifeq (true,$(call TOBOOL,$(STACK_PROTECTOR)))
+GLOBAL_DEFINES += \
+	STACK_PROTECTOR=1
+GLOBAL_COMPILEFLAGS += -fstack-protector-strong
+else
+GLOBAL_COMPILEFLAGS += -fno-stack-protector
+endif
 
 GLOBAL_COMPILEFLAGS += -fasynchronous-unwind-tables
 GLOBAL_COMPILEFLAGS += -gdwarf-2
