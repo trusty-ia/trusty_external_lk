@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2009 Corey Tabaka
- * Copyright (c) 2015 Intel Corporation
+ * Copyright (c) 2015 Travis Geiselbrecht
+ * Copyright (c) 2017 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -21,15 +21,46 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef __ARCH_CPU_H
-#define __ARCH_CPU_H
+#include <asm.h>
 
-#define PAGE_SIZE 4096
-#define PAGE_SIZE_SHIFT 12
+/* void x86_64_context_switch(uint64_t *oldsp, uint64_t newsp) */
+FUNCTION(x86_64_context_switch)
+    /* save the old context and restore the new */
+    pushf
+    pushq %rdi
+    pushq %rsi
+    pushq %rdx
+    pushq %rcx
+    pushq %rax
+    pushq %rbx
+    pushq %rbp
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
 
-/* TODO: define to resolve to platform setup discovered value */
-#define CACHE_LINE 32
+    movq %rsp,(%rdi)
+    movq %rsi,%rsp
 
-#define ARCH_DEFAULT_STACK_SIZE 8192
-#define DEFAULT_TSS 8192
-#endif
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbp
+    popq %rbx
+    popq %rax
+    popq %rcx
+    popq %rdx
+    popq %rsi
+    popq %rdi
+    popf
+
+    retq

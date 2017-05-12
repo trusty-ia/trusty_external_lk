@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Intel Corporation
+ * Copyright (c) 2016 Travis Geiselbrecht
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -20,11 +20,15 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#pragma once
 
-#include <kernel/thread.h>
+#include <compiler.h>
 
-void fpu_init(void);
-void fpu_context_switch(thread_t *old_thread, thread_t *new_thread);
-void fpu_dev_na_handler(void);
+__BEGIN_CDECLS
 
-/* End of file */
+struct arch_aspace {
+    // nothing for now, does not support address spaces other than the kernel
+};
+
+__END_CDECLS
+
