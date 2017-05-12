@@ -68,6 +68,7 @@ static inline void HEAP_INIT(void)
     /* start the heap off with some spare memory in the page allocator */
     size_t len;
     void *ptr = page_first_alloc(&len);
+    ASSERT(ptr);
     miniheap_init(ptr, len);
 }
 #define HEAP_DUMP miniheap_dump

@@ -103,6 +103,7 @@ void spin(uint32_t usecs)
 
 void _panic(void *caller, const char *fmt, ...)
 {
+#if LK_DEBUGLEVEL > 1
 	dprintf(ALWAYS, "panic (caller %p): ", caller);
 
 	/* wipe the sensitive data */
@@ -112,7 +113,7 @@ void _panic(void *caller, const char *fmt, ...)
 	va_start(ap, fmt);
 	_dvprintf(fmt, ap);
 	va_end(ap);
-
+#endif
 	platform_halt(HALT_ACTION_HALT, HALT_REASON_SW_PANIC);
 }
 
