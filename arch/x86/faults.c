@@ -218,6 +218,12 @@ void x86_exception_handler(x86_iframe_t *frame)
             exception_die(frame, "simd math fault\n");
             break;
         }
+#if ENABLE_TRUSTY_SIMICS
+        /* Workaround for Simics modeling issue. TODO: remove this when GSD tape in. */
+#define INT_RESERVED_15 0xf
+        case INT_RESERVED_15:
+            break;
+#endif
         case INT_DIVIDE_0:
         case INT_DEBUG_EX:
         case INT_STACK_FAULT:
