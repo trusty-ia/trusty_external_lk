@@ -16,7 +16,7 @@ void sys_init(void)
 sys_thread_t sys_thread_new(const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio)
 {
 	thread_t *t = thread_create(name, thread, arg, prio, stacksize);
-	DEBUG_ASSERT(t);
+	ASSERT(t);
 
 	thread_detach(t);
 	thread_resume(t);
