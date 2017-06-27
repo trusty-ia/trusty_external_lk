@@ -54,6 +54,7 @@
 .global _start
 _start:
 .align 8
+
     /* get the offset between compiled entry address and
      * actually entry address in edi register temporary
      */
@@ -314,3 +315,7 @@ highaddr:
     hlt                     /* interrupts will unhalt the processor */
     pause
     jmp 0b                  /* so jump back to halt to conserve power */
+
+.global _start_pa
+.set _start_pa, _start - KERNEL_BASE
+
