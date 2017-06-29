@@ -39,7 +39,6 @@
 
 #define LOCAL_TRACE 0
 
-static map_addr_t g_CR3 = NULL;
 
 /* Address width including virtual/physical address*/
 uint8_t g_vaddr_width = 0;
@@ -107,9 +106,13 @@ static bool x86_mmu_check_paddr(paddr_t paddr)
 }
 
 
+extern volatile map_addr_t g_cr3;
 map_addr_t get_kernel_cr3(void)
 {
-    return g_CR3;
+    /*
+     * BSP invokes get_kernel_cr3 before g_cr3 initialized.
+     */
+    return g_cr3?g_cr3:x86_get_cr3();
 }
 
 uint64_t get_pml4_entry_from_pml4_table(vaddr_t vaddr, addr_t pml4_addr)
@@ -776,17 +779,18 @@ void x86_mmu_early_init(void)
     /* Bits 07-00: Physical Address width info */
     /* Bits 15-08: Linear Address width info */
     uint32_t addr_width    = x86_get_address_width();
-    g_paddr_width = (uint8_t)(addr_width & 0xFF);
-    g_vaddr_width = (uint8_t)((addr_width >> 8) & 0xFF);
+    if (0 == g_paddr_width)
+        g_paddr_width = (uint8_t)(addr_width & 0xFF);
+    if (0 == g_vaddr_width)
+        g_vaddr_width = (uint8_t)((addr_width >> 8) & 0xFF);
 
     LTRACEF("paddr_width %u vaddr_width %u\n", g_paddr_width, g_vaddr_width);
 
     /* unmap the lower identity mapping */
-    pml4[0] = 0;
+    //pml4[0] = 0;
 
     /* tlb flush */
-    g_CR3 = x86_get_cr3();
-    x86_set_cr3(g_CR3);
+    x86_set_cr3(x86_get_cr3());
 }
 
 void x86_mmu_init(void)

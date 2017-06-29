@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2009 Corey Tabaka
- * Copyright (c) 2015 Intel Corporation
+ * Copyright (c) 2016 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -21,16 +20,29 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#pragma once
+#include <arch/mp.h>
+#include <assert.h>
+#include <trace.h>
+#include <err.h>
+#include <arch/ops.h>
 
-#include <sys/types.h>
+__WEAK status_t arch_mp_send_ipi(mp_cpu_mask_t target, mp_ipi_t ipi)
+{
+    return NO_ERROR;
+}
 
-struct arch_thread {
-    vaddr_t sp;
-    uint64_t gs;
-#if X86_WITH_FPU
-    vaddr_t *fpu_states;
-    uint8_t fpu_buffer[512 + 16];
-#endif
-};
+__WEAK enum handler_return x86_ipi_generic_handler(void *arg)
+{
+
+    return INT_NO_RESCHEDULE;
+}
+
+__WEAK enum handler_return x86_ipi_reschedule_handler(void *arg)
+{
+    return INT_RESCHEDULE;
+}
+
+__WEAK void arch_mp_init_percpu(void)
+{
+}
 

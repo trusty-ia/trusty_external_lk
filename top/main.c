@@ -143,7 +143,6 @@ static int bootstrap2(void *arg)
 	lk_primary_cpu_init_level(LK_INIT_LEVEL_ARCH, LK_INIT_LEVEL_PLATFORM - 1);
 	platform_init();
 
-
 	// initialize the target
 	dprintf(SPEW, "initializing target\n");
 	lk_primary_cpu_init_level(LK_INIT_LEVEL_PLATFORM, LK_INIT_LEVEL_TARGET - 1);

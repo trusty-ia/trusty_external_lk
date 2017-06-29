@@ -403,8 +403,6 @@ void thread_exit(int retcode)
     DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
     DEBUG_ASSERT(!thread_is_idle(current_thread));
 
-//  dprintf("thread_exit: current %p\n", current_thread);
-
     THREAD_LOCK(state);
 
     /* enter the dead state */

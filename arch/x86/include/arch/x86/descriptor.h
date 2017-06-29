@@ -54,7 +54,6 @@
 #define USER_DATA_64_SELECTOR           0x58
 
 #define TSS_SELECTOR                    0x60
-#define VIDEO_SELECTOR                  0x68
 
 /*
  * Descriptor Types
@@ -66,7 +65,7 @@
 #define SEG_TYPE_DATA_RW    0x2
 #define SEG_TYPE_CODE_RW    0xa
 
-#define USER_DPL	    0x03
+#define USER_RPL	    0x03
 
 #ifndef ASSEMBLY
 #include <sys/types.h>
@@ -76,5 +75,5 @@ typedef uint16_t seg_sel_t;
 void set_global_desc(seg_sel_t sel, void *base, uint32_t limit,
                      uint8_t present, uint8_t ring, uint8_t sys, uint8_t type, uint8_t gran, uint8_t bits);
 
-void *get_system_selector(seg_sel_t sel);
+void *get_tss_base(void);
 #endif
