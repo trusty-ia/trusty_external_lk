@@ -27,6 +27,5 @@
 void fpu_init(void);
 void fpu_init_thread_states(thread_t *t);
 void fpu_context_switch(thread_t *old_thread, thread_t *new_thread);
-void fpu_dev_na_handler(void);
 
 /* End of file */

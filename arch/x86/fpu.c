@@ -56,11 +56,14 @@
 
 #define OSXSAVE_CAP(ecx, edx) ((ecx & ECX_OSXSAVE) !=0 )
 
-static int fp_supported;
-static thread_t *fp_owner;
+static int fp_supported = 0;
 
 /* FXSAVE area comprises 512 bytes starting with 16-byte aligned */
-static uint8_t __ALIGNED(16) fpu_init_states[512]= {0};
+typedef struct _fpu_init_state {
+    uint8_t fpu_states[512];
+}fpu_init_states_t;
+
+static fpu_init_states_t __ALIGNED(16) fpu_init_states[SMP_MAX_CPUS];
 
 static void get_cpu_cap(uint32_t *ecx, uint32_t *edx)
 {
@@ -75,6 +78,7 @@ void fpu_init(void)
     uint32_t ecx = 0, edx = 0;
     uint16_t fcw;
     uint32_t mxcsr;
+    uint     cpu_id = arch_curr_cpu_num();
 
 #ifdef ARCH_X86_64
     uint64_t x;
@@ -82,15 +86,13 @@ void fpu_init(void)
     uint32_t x;
 #endif
 
-    fp_supported = 0;
-    fp_owner = NULL;
-
     get_cpu_cap(&ecx, &edx);
 
     if (!FPU_CAP(ecx, edx) || !SSE_CAP(ecx, edx) || !FXSAVE_CAP(ecx, edx))
         return;
 
-    fp_supported = 1;
+    if (0 == fp_supported)
+        fp_supported = 1;
 
     /* No x87 emul, monitor co-processor */
 
@@ -132,16 +134,17 @@ void fpu_init(void)
     __asm__ __volatile__("ldmxcsr %0" : : "m" (mxcsr));
 
     /* save fpu initial states, and used when new thread creates */
-    __asm__ __volatile__("fxsave %0" : "=m" (fpu_init_states));
+    __asm__ __volatile__("fxsave %0" : "=m" (fpu_init_states[cpu_id].fpu_states));
 
-    x86_set_cr0(x86_get_cr0() | X86_CR0_TS);
     return;
 }
 
 void fpu_init_thread_states(thread_t *t)
 {
+    uint cpu_id = arch_curr_cpu_num();
+
     t->arch.fpu_states = (vaddr_t *)ROUNDUP(((vaddr_t)t->arch.fpu_buffer), 16);
-    memcpy(t->arch.fpu_states, fpu_init_states, sizeof(fpu_init_states));
+    memcpy(t->arch.fpu_states, (const void *)fpu_init_states[cpu_id].fpu_states, sizeof(fpu_init_states_t));
 }
 
 void fpu_context_switch(thread_t *old_thread, thread_t *new_thread)
@@ -149,34 +152,14 @@ void fpu_context_switch(thread_t *old_thread, thread_t *new_thread)
     if (fp_supported == 0)
         return;
 
-    if (new_thread != fp_owner)
-        x86_set_cr0(x86_get_cr0() | X86_CR0_TS);
-    else
-        x86_set_cr0(x86_get_cr0() & ~X86_CR0_TS);
-
-    return;
-}
-
-void fpu_dev_na_handler(void)
-{
-    thread_t *self;
-
-    x86_set_cr0(x86_get_cr0() & ~X86_CR0_TS);
-
-    if (fp_supported == 0)
-        return;
-
-    self = get_current_thread();
-
-    LTRACEF("owner %p self %p\n", fp_owner, self);
-    if ((fp_owner != NULL) && (fp_owner != self)) {
-        __asm__ __volatile__("fxsave %0" : "=m" (*fp_owner->arch.fpu_states));
-        __asm__ __volatile__("fxrstor %0" : : "m" (*self->arch.fpu_states));
+    if (old_thread) {
+        __asm__ __volatile__("fxsave %0" : "=m" (*old_thread->arch.fpu_states));
     }
+    __asm__ __volatile__("fxrstor %0" : : "m" (*new_thread->arch.fpu_states));
 
-    fp_owner = self;
     return;
 }
+
 #endif
 
 /* End of file */

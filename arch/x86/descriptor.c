@@ -73,7 +73,7 @@ void set_global_desc(seg_sel_t sel, void *base, uint32_t limit,
     _gdt[index].seg_desc_legacy.s = sys != 0;       /* system / non-system */
     _gdt[index].seg_desc_legacy.d_b = bits != 0;    /* 16 / 32 bit */
 #if ARCH_X86_64
-    if(TSS_SELECTOR == sel){
+    if((sel >= TSS_SELECTOR) && (sel <= TSS_SELECTOR + (SMP_MAX_CPUS - 1) * 0x10)) {
         index = (sel+8) >> 3;
         _gdt[index].seg_desc_64_t.base_32_63 = ((uint64_t)base >> 32) & 0xffffffff;
     }

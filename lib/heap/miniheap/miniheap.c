@@ -291,7 +291,8 @@ retry:
     mutex_release(&theheap.lock);
 
     /* try to grow the heap if we can */
-    if (ptr == NULL && retry_count == 0) {
+    // :TODO: need to fix this bug, this is just WA.
+    if (ptr == NULL && retry_count < 10) {
         ssize_t err = heap_grow(size);
         if (err >= 0) {
             retry_count++;

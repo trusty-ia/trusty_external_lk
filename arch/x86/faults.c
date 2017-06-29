@@ -52,8 +52,9 @@ static void dump_fault_frame(x86_iframe_t *frame)
     dprintf(CRITICAL, " DS:     %04x  ES:     %04x  FS:   %04x  GS:     %04x\n",
             frame->ds, frame->es, frame->fs, frame->gs);
 #elif ARCH_X86_64
-    dprintf(CRITICAL, " CS:              %4llx RIP: %16llx EFL: %16llx CR2: %16llx CR3: %16llx\n",
-            frame->cs, frame->rip, frame->rflags, x86_get_cr2(), x86_get_cr3());
+    dprintf(CRITICAL, " CPU:%d\n", arch_curr_cpu_num());
+    dprintf(CRITICAL, " CS:              %4llx RIP: %16llx EFL: %16llx CR3: %16llx\n",
+            frame->cs, frame->rip, frame->rflags, x86_get_cr3());
     dprintf(CRITICAL, " RAX: %16llx RBX: %16llx RCX: %16llx RDX: %16llx\n",
             frame->rax, frame->rbx, frame->rcx, frame->rdx);
     dprintf(CRITICAL, " RSI: %16llx RDI: %16llx RBP: %16llx RSP: %16llx\n",
@@ -103,7 +104,6 @@ void x86_invop_handler(x86_iframe_t *frame)
 
 void x86_unhandled_exception(x86_iframe_t *frame)
 {
-    printf("vector %u\n", (uint)frame->vector);
     exception_die(frame, "unhandled exception, halting\n");
 }
 
@@ -199,7 +199,7 @@ void x86_exception_handler(x86_iframe_t *frame)
 
         case INT_DEV_NA_EX:
 #if X86_WITH_FPU
-            fpu_dev_na_handler();
+            exception_die(frame, "device na fault\n");
 #endif
             break;
 

@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2009 Corey Tabaka
- * Copyright (c) 2015 Intel Corporation
  * Copyright (c) 2016 Travis Geiselbrecht
  * Copyright (c) 2017 Intel Corparation
  *
@@ -27,14 +26,14 @@
 #include <arch/x86/descriptor.h>
 #include <arch/x86/mmu.h>
 
-#define MSR_EFER   0xc0000080
-#define EFER_LME   0x00000100
-#define PAT_MSR    0x277
-#define CACHE_MODE 0x70106
+#define MSR_EFER    0xc0000080
+#define EFER_LME    0x00000100
+#define PAT_MSR     0x277
+#define CACHE_MODE  0x70106
+#define MSR_GS_BASE 0xc0000101
 
 #define PHYS_ADDR_DELTA          (KERNEL_BASE - MEMBASE)
 #define PHYS(x)                  ((x) - PHYS_ADDR_DELTA)
-#define DEV_INFO_POINTER         16
 
 #define PGDIR_SHIFT      39
 #define PUD_SHIFT        30
@@ -104,12 +103,12 @@ bss_setup:
     /* save g_trusty_startup_info in local */
     movl %edi, %esi
     lea PHYS(g_trusty_startup_info)(%ebp), %edi
-    movl $24, %ecx
+    movl $32, %ecx
     shrl $2, %ecx
     rep movsl
 
     /* clear previous g_trusty_startup_info */
-    movl $24, %ecx
+    movl $32, %ecx
     shrl $2, %ecx
 2:
     movl $0, (%eax)
@@ -134,9 +133,9 @@ bss_setup:
 
 paging_setup:
     /* Preparing 64 bit paging, we will use 2MB pages covering 4GB
-    for initial bootstrap, this page table will be 1 to 1  */
-
-    /* PAE bit must be enabled  for 64 bit paging*/
+     * for initial bootstrap, this page table will be 1 to 1
+     * PAE bit must be enabled  for 64 bit paging
+     */
     mov %cr4, %eax
     btsl $(5), %eax
     mov %eax, %cr4
@@ -195,16 +194,18 @@ paging_setup:
     inc  %eax
     loop 0b
 
-
-    /* Enabling Paging and from this point we are in
-    32 bit compatibility mode*/
+    /*
+     *Enabling Paging and from this point we are in
+     * 32 bit compatibility mode
+     */
     mov %cr0,  %eax
     btsl $(31), %eax
     mov %eax,  %cr0
 
-
-    /* Using another long jump to be on 64 bit mode
-    after this we will be on real 64 bit mode */
+    /*
+     * Using another long jump to be on 64 bit mode
+     * after this we will be on real 64 bit mode
+     */
     pushl $CODE_64_SELECTOR     /*Need to put it in a the right CS*/
     lea PHYS(farjump64)(%ebp), %eax
     pushl %eax
@@ -214,11 +215,9 @@ paging_setup:
 .code64
 farjump64:
     /*
-     **************************
      * start to map the kernel region, 4K leaf
-     **************************
+     * get the offset from run addr to mem base
      */
-    /* get the offset from run addr to mem base */
     movq g_trusty_startup_info + 16(%rip), %rbp
     leaq _start(%rip), %rax
     subq %rbp, %rax
@@ -232,7 +231,6 @@ farjump64:
     orq $X86_KERNEL_PD_FLAGS, %rsi
     movq %rsi, (%rdi)
 
-    /* point the pdp_high table at pde_kernel */
     pg_shift rbp, rax, PUD_SHIFT
     leaq pdp_high(%rip), %rdi
     addq %rax, %rdi
@@ -240,7 +238,6 @@ farjump64:
     orq $X86_KERNEL_PD_FLAGS, %rsi
     movq %rsi, (%rdi)
 
-    /* map lk image according to LK_IMAGE_SIZE_4K_PAGES */
     pg_shift rbp, rax, PMD_SHIFT
     leaq pde_kernel(%rip), %rdi
     addq %rax, %rdi
@@ -253,7 +250,6 @@ farjump64:
     addq  $8, %rdi
     addq $4096, %rsi
     loop 0b
-
 
     pg_shift rbp, rax, PTD_SHIFT
     leaq pte_kernel(%rip), %rdi
@@ -273,21 +269,25 @@ farjump64:
     leaq _start(%rip), %rax
     movq %rax, real_run_addr(%rip)
 
-
     /* branch to our high address */
     mov  $highaddr, %rax
     jmp  *%rax
 
 highaddr:
+    /* set TR now, since lk_main check cpuid when initialize thread */
+    xorq %rax, %rax
+    mov  %ax, %gs
+    mov  $TSS_SELECTOR, %ax
+    ltr  %ax
+
     /* load the high kernel stack */
-    mov  $(_kstack + 4096), %rsp
+    mov $(_kstack + 4096), %rsp
 
     /* reload the gdtr */
     lgdt _gdtr
 
 #ifdef STACK_PROTECTOR
-    /* setup the random value of stack check guard before C call.
-     */
+    /* setup stack check guard before C call */
     leaq __stack_chk_guard(%rip), %rdi
     call get_rand_64
     subq  $0, %rax
@@ -296,6 +296,14 @@ highaddr:
 
     /* set up the idt */
     call setup_idt
+
+    /* set up gs base */
+    leaq global_states(%rip), %rax
+
+    movq %rax, %rdx
+    shr  $32, %rdx
+    movq $MSR_GS_BASE, %rcx
+    wrmsr
 
     xorq %rdi, %rdi
     xorq %rsi, %rsi
@@ -313,3 +321,9 @@ highaddr:
 .global _start_pa
 .set _start_pa, _start - KERNEL_BASE
 
+.align 4096
+.global __tss_start
+.global __tss_end
+__tss_start:
+.fill 4096*SMP_MAX_CPUS, 1, 0x0
+__tss_end:

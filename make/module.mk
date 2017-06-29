@@ -63,7 +63,6 @@ MODULE_DEFINES += MODULE_SRCDEPS=\"$(subst $(SPACE),_,$(MODULE_SRCDEPS))\"
 MODULE_DEFINES += MODULE_DEPS=\"$(subst $(SPACE),_,$(MODULE_DEPS))\"
 
 ifeq (true,$(call TOBOOL,$(MODULE_STATIC_LIB)))
-$(warning >>>>>>>>>>>>)
 MODULE_DEFINES += MODULE_STATIC_LIB=1
 endif
 
@@ -92,7 +91,6 @@ include make/compile.mk
 
 ifeq (true,$(call TOBOOL,$(MODULE_STATIC_LIB)))
 
-$(error >>>>>>>>>>>>)
 MODULE_OBJECT := $(call TOBUILDDIR,$(MODULE_SRCDIR).mod.a)
 $(MODULE_OBJECT): $(MODULE_OBJS) $(MODULE_EXTRA_OBJS)
 	@$(MKDIR)

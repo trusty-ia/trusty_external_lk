@@ -34,32 +34,29 @@
 #include <kernel/vm.h>
 #include <arch/mmu.h>
 #include <arch/x86/mmu.h>
+#include <arch/x86/mp.h>
 
-/* we're uniprocessor at this point for x86, so store a global pointer to the current thread */
-static struct thread *_current_thread;
-
-extern uint32_t g_addr_width;
-
-struct thread *get_current_thread(void)
+inline struct thread *get_current_thread(void)
 {
-    return _current_thread;
+    return (struct thread *)x86_get_current_thread();
 }
 
-void set_current_thread(struct thread *t)
+inline void set_current_thread(struct thread *t)
 {
-    _current_thread = t;
+    x86_set_current_thread((void *)t);
 }
 
 static void initial_thread_func(void) __NO_RETURN;
 static void initial_thread_func(void)
 {
     int ret;
+    thread_t *cur_thread = get_current_thread();
 
     /* release the thread lock that was implicitly held across the reschedule */
     spin_unlock(&thread_lock);
     arch_enable_ints();
 
-    ret = _current_thread->entry(_current_thread->arg);
+    ret = cur_thread->entry(cur_thread->arg);
 
     thread_exit(ret);
 }
@@ -105,6 +102,8 @@ void arch_thread_initialize(thread_t *t)
 
     // set the stack pointer
     t->arch.sp = (vaddr_t)frame;
+
+    t->arch.gs = 0;
 }
 
 void arch_dump_thread(thread_t *t)
@@ -172,6 +171,13 @@ void arch_context_switch(thread_t *oldthread, thread_t *newthread)
     fpu_context_switch(oldthread, newthread);
 #endif
 
+    /*
+     * GS.base should never change at same processor.
+     * However, each user thread might has its own GS.base,
+     * switch GS.base which stored at X86_MSR_KRNL_GS_BASE(0xc0000102)
+     */
+    oldthread->arch.gs = read_msr(X86_MSR_KRNL_GS_BASE);
+    write_msr(X86_MSR_KRNL_GS_BASE, newthread->arch.gs);
     x86_64_context_switch(&oldthread->arch.sp, newthread->arch.sp);
 }
 #endif

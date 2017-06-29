@@ -29,6 +29,7 @@
 #ifndef ASSEMBLY
 
 #include <arch/x86.h>
+#include <arch/x86/descriptor.h>
 
 /* override of some routines */
 void arch_enable_ints(void);
@@ -115,16 +116,27 @@ void set_current_thread(struct thread *t);
 
 static inline uint arch_curr_cpu_num(void)
 {
-    return 0;
+    uint cpu;
+    uint16_t tr_sel;
+
+    __asm__ volatile(
+        "str %[tr_sel];"
+        : [tr_sel]"=m" (tr_sel)
+        :
+        : "memory"
+    );
+
+    cpu = (uint)((tr_sel - TSS_SELECTOR) >> 4);
+    return cpu;
 }
 
-#define mb()        CF
-#define wmb()       CF
-#define rmb()       CF
+#define mb()        __asm__ volatile ("mfence":::"memory");
+#define wmb()       __asm__ volatile ("sfence":::"memory");
+#define rmb()       __asm__ volatile ("lfence":::"memory");
 
 #ifdef WITH_SMP
 #define smp_mb()    CF
-#define smp_wmb()   CF
+#define smp_wmb()   mb()
 #define smp_rmb()   CF
 #else
 #define smp_mb()    CF

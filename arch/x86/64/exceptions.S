@@ -44,7 +44,7 @@ _isr:
     nop            /* i>=0x80, pushq $i occupies 5 bytes compare to 2 bytes if i<0x80 */
     nop            /* need to add 3 nops to fill the gap */
     nop            /* to make sure isr_stub_len correct for each intr */
-        jmp interrupt_common
+    jmp interrupt_common
 .else
     pushq $0                                /* fill in error code in iframe */
     pushq $i                                /* interrupt number */
@@ -66,7 +66,14 @@ _isr:
 .fill 256
 
 interrupt_common:
+    /* Check if from user sapce */
+    testb $3, 0x18(%rsp)
+    jz 1f
 
+    /* swap gs to kernel space */
+    swapgs
+
+1:
     /* save general purpose registers */
     pushq %r15
     pushq %r14
@@ -105,7 +112,15 @@ interrupt_common:
     popq %r14
     popq %r15
 
-    /* drop vector number and error code*/
+    /* Check to if back to user space */
+    testb $3, 0x18(%rsp)
+    jz 1f
+
+    /* swap gs to user space */
+    swapgs
+
+1:
+    /* drop vector number and error code */
     addq $16, %rsp
     iretq
 
@@ -143,7 +158,7 @@ DATA(_idtr)
 DATA(_idt)
 
 .set i, 0
-.rept NUM_INT-1
+.rept NUM_INT
     .short 0        /* low 16 bits of ISR offset (_isr#i & 0FFFFh) */
     .short CODE_64_SELECTOR   /* selector */
     .byte  0
