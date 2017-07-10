@@ -166,6 +166,10 @@ GLOBAL_DEFINES += \
 	LK_DEBUGLEVEL=$(LKDEBUG)
 endif
 
+ifeq ($(call TOBOOL,$(ENABLE_STATIC_LIB)),true)
+STATIC_LIBS :=
+endif
+
 # allow additional defines from outside the build system
 ifneq ($(EXTERNAL_DEFINES),)
 GLOBAL_DEFINES += $(EXTERNAL_DEFINES)

@@ -92,14 +92,32 @@ include make/compile.mk
 ifeq (true,$(call TOBOOL,$(MODULE_STATIC_LIB)))
 
 MODULE_OBJECT := $(call TOBUILDDIR,$(MODULE_SRCDIR).mod.a)
+ifeq (true,$(call TOBOOL,$(ENABLE_STATIC_LIB)))
+MODULE_NAME := $(notdir $(MODULE_OBJECT))
+FILT_RESULT := $(strip $(foreach t, $(STATIC_LIBS), $(if $(filter $(notdir $(t)), $(MODULE_NAME)), $(t),)))
+
+ifneq ($(FILT_RESULT),)
+MODULE_OBJECT := $(FILT_RESULT)
+$(MODULE_OBJECT) :
+else
+STATIC_LIBS += $(MODULE_OBJECT)
 $(MODULE_OBJECT): $(MODULE_OBJS) $(MODULE_EXTRA_OBJS)
 	@$(MKDIR)
 	@echo creating $@
 	$(NOECHO)rm -f $@
 	$(NOECHO)$(AR) rcs $@ $^
 
+endif
 else
+$(MODULE_OBJECT): $(MODULE_OBJS) $(MODULE_EXTRA_OBJS)
+	@$(MKDIR)
+	@echo creating $@
+	$(NOECHO)rm -f $@
+	$(NOECHO)$(AR) rcs $@ $^
 
+endif
+
+else
 MODULE_OBJECT := $(call TOBUILDDIR,$(MODULE_SRCDIR).mod.o)
 $(MODULE_OBJECT): $(MODULE_OBJS) $(MODULE_EXTRA_OBJS)
 	@$(MKDIR)
