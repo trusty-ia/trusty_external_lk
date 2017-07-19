@@ -48,6 +48,7 @@ static int atomic_or(volatile int *ptr, int val);
 #elif ARCH_X86_64
 static int atomic_and(volatile int *ptr, long val);
 static int atomic_or(volatile int *ptr, long val);
+int get_rand_64(uint64_t* val_ret);
 #endif
 
 static uint32_t arch_cycle_count(void);

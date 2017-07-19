@@ -857,7 +857,6 @@ static inline uint64_t check_smap_avail(void)
         :"a" (reg_a),"c" (reg_c));
     return ((reg_b>>0x14) & 0x1);
 }
-
 #endif // ARCH_X86_64
 
 __END_CDECLS

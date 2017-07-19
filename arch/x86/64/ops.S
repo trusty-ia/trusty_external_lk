@@ -99,3 +99,15 @@ FUNCTION(arch_spin_lock)
 FUNCTION(arch_spin_unlock)
    movl  $0, (%rdi)
    ret
+
+FUNCTION(get_rand_64)
+    mov $10, %rdx
+1:
+    rdrand %rax
+    jc 2f            #jump short if carry (CF=1)
+    dec %rdx
+    jnz 1b
+    jz 3f
+2:  mov %rax, (%rdi)
+3:  mov %rdx, %rax
+    ret
