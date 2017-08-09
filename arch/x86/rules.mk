@@ -93,6 +93,11 @@ else
 GLOBAL_COMPILEFLAGS += -fno-stack-protector
 endif
 
+ifeq (true,$(call TOBOOL,$(ASLR_OF_TA)))
+GLOBAL_DEFINES += \
+	ASLR_OF_TA=1
+endif
+
 GLOBAL_COMPILEFLAGS += -fasynchronous-unwind-tables
 GLOBAL_COMPILEFLAGS += -gdwarf-2
 GLOBAL_LDFLAGS += -z max-page-size=0x1000

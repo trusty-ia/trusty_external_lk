@@ -285,12 +285,14 @@ highaddr:
     /* reload the gdtr */
     lgdt _gdtr
 
+#ifdef STACK_PROTECTOR
     /* setup the random value of stack check guard before C call.
      */
     leaq __stack_chk_guard(%rip), %rdi
     call get_rand_64
     subq  $0, %rax
     jz  0f
+#endif
 
     /* set up the idt */
     call setup_idt
