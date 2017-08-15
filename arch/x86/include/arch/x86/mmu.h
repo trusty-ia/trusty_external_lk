@@ -152,7 +152,7 @@ status_t x86_mmu_add_mapping(map_addr_t init_table, map_addr_t paddr,
 status_t x86_mmu_unmap(map_addr_t init_table, vaddr_t vaddr, uint count);
 
 addr_t *x86_create_new_cr3(void);
-map_addr_t get_kernel_cr3();
+map_addr_t get_kernel_cr3(void);
 
 void x86_mmu_early_init(void);
 void x86_mmu_init(void);

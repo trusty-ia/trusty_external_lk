@@ -271,7 +271,7 @@ status_t x86_mmu_get_mapping(map_addr_t pml4, vaddr_t vaddr, uint32_t *ret_level
     }
     LTRACEF_LEVEL(2, "pml4e 0x%llx\n", pml4e);
 
-    pdpe = get_pdp_entry_from_pdp_table(vaddr, paddr_to_kvaddr(pml4e & X86_PG_PA_FRAME));
+    pdpe = get_pdp_entry_from_pdp_table(vaddr, (uint64_t)paddr_to_kvaddr(pml4e & X86_PG_PA_FRAME));
     if ((pdpe & X86_MMU_PG_P) == 0) {
         *ret_level = PDP_L;
         *last_valid_entry = pml4e;
@@ -279,7 +279,7 @@ status_t x86_mmu_get_mapping(map_addr_t pml4, vaddr_t vaddr, uint32_t *ret_level
     }
     LTRACEF_LEVEL(2, "pdpe 0x%llx\n", pdpe);
 
-    pde = get_pd_entry_from_pd_table(vaddr, paddr_to_kvaddr(pdpe & X86_PG_PA_FRAME));
+    pde = get_pd_entry_from_pd_table(vaddr, (uint64_t)paddr_to_kvaddr(pdpe & X86_PG_PA_FRAME));
     if ((pde & X86_MMU_PG_P) == 0) {
         *ret_level = PD_L;
         *last_valid_entry = pdpe;
@@ -296,7 +296,7 @@ status_t x86_mmu_get_mapping(map_addr_t pml4, vaddr_t vaddr, uint32_t *ret_level
     }
 
     /* 4 KB pages */
-    pte = get_pt_entry_from_pt_table(vaddr, paddr_to_kvaddr(pde & X86_PG_PA_FRAME));
+    pte = get_pt_entry_from_pt_table(vaddr, (uint64_t)paddr_to_kvaddr(pde & X86_PG_PA_FRAME));
     if ((pte & X86_MMU_PG_P) == 0) {
         *ret_level = PT_L;
         *last_valid_entry = pde;
@@ -426,7 +426,7 @@ addr_t *x86_create_new_cr3(void)
 {
     addr_t *new_table = NULL;
 
-    new_table = _map_alloc_page();
+    new_table = (addr_t *)_map_alloc_page();
     ASSERT(new_table);
     new_table[511] = pml4[511];
 
@@ -450,7 +450,7 @@ status_t x86_mmu_add_mapping(map_addr_t pml4, map_addr_t paddr,
 {
     uint32_t pd_new = 0, pdp_new = 0;
     uint64_t pml4e, pdpe, pde;
-    map_addr_t *m = NULL;
+    map_addr_t m;
     status_t ret = NO_ERROR;
 
     LTRACEF("pml4 0x%llx paddr 0x%llx vaddr 0x%lx flags 0x%llx\n", pml4, paddr, vaddr, mmu_flags);
@@ -463,8 +463,8 @@ status_t x86_mmu_add_mapping(map_addr_t pml4, map_addr_t paddr,
 
     if ((pml4e & X86_MMU_PG_P) == 0) {
         /* Creating a new pdp table */
-        m = vaddr_to_paddr(_map_alloc_page());
-        if (m == NULL) {
+        m = (map_addr_t)vaddr_to_paddr(_map_alloc_page());
+        if (m == 0) {
             ret = ERR_NO_MEMORY;
             goto clean;
         }
@@ -475,44 +475,44 @@ status_t x86_mmu_add_mapping(map_addr_t pml4, map_addr_t paddr,
     }
 
     if (!pdp_new)
-        pdpe = get_pdp_entry_from_pdp_table(vaddr, paddr_to_kvaddr(pml4e & X86_PG_PA_FRAME));
+        pdpe = get_pdp_entry_from_pdp_table(vaddr, (uint64_t)paddr_to_kvaddr(pml4e & X86_PG_PA_FRAME));
 
     if (pdp_new || (pdpe & X86_MMU_PG_P) == 0) {
         /* Creating a new pd table  */
-        m  = vaddr_to_paddr(_map_alloc_page());
-        if (m == NULL) {
+        m  = (map_addr_t)vaddr_to_paddr(_map_alloc_page());
+        if (m == 0) {
             ret = ERR_NO_MEMORY;
             if (pdp_new)
                 goto clean_pdp;
             goto clean;
         }
 
-        update_pdp_entry(vaddr, paddr_to_kvaddr(pml4e & X86_PG_PA_FRAME), m, get_x86_arch_flags(mmu_flags));
+        update_pdp_entry(vaddr, (uint64_t)paddr_to_kvaddr(pml4e & X86_PG_PA_FRAME), m, get_x86_arch_flags(mmu_flags));
         pdpe = (uint64_t)m;
         X86_SET_FLAG(pd_new);
     }
 
     if (!pd_new)
-        pde = get_pd_entry_from_pd_table(vaddr, paddr_to_kvaddr(pdpe & X86_PG_PA_FRAME));
+        pde = get_pd_entry_from_pd_table(vaddr, (uint64_t)paddr_to_kvaddr(pdpe & X86_PG_PA_FRAME));
 
     if (pd_new || (pde & X86_MMU_PG_P) == 0) {
         /* Creating a new pt */
-        m  = vaddr_to_paddr(_map_alloc_page());
-        if (m == NULL) {
+        m  = (map_addr_t)vaddr_to_paddr(_map_alloc_page());
+        if (m == 0) {
             ret = ERR_NO_MEMORY;
             if (pd_new)
                 goto clean_pd;
             goto clean;
         }
 
-        update_pd_entry(vaddr, paddr_to_kvaddr(pdpe & X86_PG_PA_FRAME), m, get_x86_arch_flags(mmu_flags));
+        update_pd_entry(vaddr, (uint64_t)paddr_to_kvaddr(pdpe & X86_PG_PA_FRAME), m, get_x86_arch_flags(mmu_flags));
         pde = (uint64_t)m;
     }
 
     pde &= X86_PG_PA_FRAME;
 
     /* Updating the page table entry with the paddr and access flags required for the mapping */
-    update_pt_entry(vaddr, paddr, paddr_to_kvaddr(pde & X86_PG_PA_FRAME), get_x86_arch_flags(mmu_flags));
+    update_pt_entry(vaddr, paddr, (uint64_t)paddr_to_kvaddr(pde & X86_PG_PA_FRAME), get_x86_arch_flags(mmu_flags));
     ret = NO_ERROR;
     goto clean;
 
@@ -646,7 +646,7 @@ int arch_mmu_unmap(arch_aspace_t *aspace, vaddr_t vaddr, uint count)
     DEBUG_ASSERT(x86_get_cr3());
     current_cr3_val = (addr_t)x86_get_cr3();
 
-    return (x86_mmu_unmap(paddr_to_kvaddr(current_cr3_val & X86_PG_PA_FRAME), vaddr, count));
+    return (x86_mmu_unmap((map_addr_t)paddr_to_kvaddr(current_cr3_val & X86_PG_PA_FRAME), vaddr, count));
 }
 
 /**
@@ -708,7 +708,7 @@ status_t arch_mmu_query(arch_aspace_t *aspace, vaddr_t vaddr, paddr_t *paddr, ui
     DEBUG_ASSERT(x86_get_cr3());
     current_cr3_val = (addr_t)x86_get_cr3();
 
-    stat = x86_mmu_get_mapping(paddr_to_kvaddr(current_cr3_val & X86_PG_PA_FRAME), vaddr, &ret_level, &ret_flags, &last_valid_entry);
+    stat = x86_mmu_get_mapping((map_addr_t)paddr_to_kvaddr(current_cr3_val & X86_PG_PA_FRAME), vaddr, &ret_level, &ret_flags, &last_valid_entry);
     if (stat)
         return stat;
 
@@ -747,7 +747,7 @@ int arch_mmu_map(arch_aspace_t *aspace, vaddr_t vaddr, paddr_t paddr, uint count
     range.start_paddr = paddr;
     range.size = count * PAGE_SIZE;
 
-    return (x86_mmu_map_range(paddr_to_kvaddr(current_cr3_val & X86_PG_PA_FRAME), &range, flags));
+    return (x86_mmu_map_range((map_addr_t)paddr_to_kvaddr(current_cr3_val & X86_PG_PA_FRAME), &range, flags));
 }
 
 void x86_mmu_early_init(void)

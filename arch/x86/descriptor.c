@@ -62,9 +62,9 @@ void set_global_desc(seg_sel_t sel, void *base, uint32_t limit,
     _gdt[index].seg_desc_legacy.limit_15_0 = limit & 0x0000ffff;
     _gdt[index].seg_desc_legacy.limit_19_16 = (limit & 0x000f0000) >> 16;
 
-    _gdt[index].seg_desc_legacy.base_15_0 = ((uint32_t) base) & 0x0000ffff;
-    _gdt[index].seg_desc_legacy.base_23_16 = (((uint32_t) base) & 0x00ff0000) >> 16;
-    _gdt[index].seg_desc_legacy.base_31_24 = ((uint32_t) base) >> 24;
+    _gdt[index].seg_desc_legacy.base_15_0 = ((uint64_t) base) & 0x0000ffff;
+    _gdt[index].seg_desc_legacy.base_23_16 = (((uint64_t) base) & 0x00ff0000) >> 16;
+    _gdt[index].seg_desc_legacy.base_31_24 = ((uint64_t) base) >> 24;
 
     _gdt[index].seg_desc_legacy.type = type & 0x0f; /* segment type */
     _gdt[index].seg_desc_legacy.p = present != 0;   /* present */
