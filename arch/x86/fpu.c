@@ -39,6 +39,7 @@
 #define ECX_SSSE3   (0x00000001 << 9)
 #define ECX_SSE4_1  (0x00000001 << 19)
 #define ECX_SSE4_2  (0x00000001 << 20)
+#define ECX_OSXSAVE (0x00000001 << 27)
 #define EDX_FXSR    (0x00000001 << 24)
 #define EDX_SSE     (0x00000001 << 25)
 #define EDX_SSE2    (0x00000001 << 26)
@@ -52,6 +53,8 @@
     )
 
 #define FXSAVE_CAP(ecx, edx) ((edx & EDX_FXSR) != 0)
+
+#define OSXSAVE_CAP(ecx, edx) ((ecx & ECX_OSXSAVE) !=0 )
 
 static int fp_supported;
 static thread_t *fp_owner;
@@ -113,7 +116,9 @@ void fpu_init(void)
     x = x86_get_cr4();
     x |= X86_CR4_OSXMMEXPT;
     x |= X86_CR4_OSFXSR;
-    x &= ~X86_CR4_OSXSAVE;
+    if(OSXSAVE_CAP(ecx, edx)) {
+        x |= X86_CR4_OSXSAVE;
+    }
     x86_set_cr4(x);
 
     __asm__ __volatile__("stmxcsr %0" : "=m" (mxcsr));
