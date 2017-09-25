@@ -227,7 +227,6 @@ THUMBCFLAGS :=
 THUMBINTERWORK :=
 ifeq ($(ENABLE_THUMB),true)
 THUMBCFLAGS := -mthumb -D__thumb__
-THUMBINTERWORK := -mthumb-interwork
 endif
 
 GLOBAL_INCLUDES += \
@@ -333,7 +332,6 @@ $(info TOOLCHAIN_PREFIX = $(TOOLCHAIN_PREFIX))
 
 ARCH_COMPILEFLAGS += $(ARCH_$(ARCH)_COMPILEFLAGS)
 
-GLOBAL_COMPILEFLAGS += $(THUMBINTERWORK)
 
 # set the max page size to something more reasonables (defaults to 64K or above)
 GLOBAL_LDFLAGS += -z max-page-size=4096
