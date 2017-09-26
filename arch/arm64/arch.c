@@ -97,7 +97,7 @@ void arch_chain_load(void *entry, ulong arg0, ulong arg1, ulong arg2, ulong arg3
 }
 
 /* switch to user mode, set the user stack pointer to user_stack_top, put the svc stack pointer to the top of the kernel stack */
-void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top)
+void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top, uint32_t flags, ulong arg0)
 {
     DEBUG_ASSERT(IS_ALIGNED(user_stack_top, 16));
 
@@ -112,22 +112,26 @@ void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top)
      * all interrupts enabled
      * mode 0: EL0t
      */
-    uint64_t spsr = 0;
+    uint64_t spsr = (flags & ARCH_ENTER_USPACE_FLAG_32BIT) ? 0x10 : 0;
 
     arch_disable_ints();
 
     asm volatile(
+        "mov    x0, %[arg0];"
+        "mov    x13, %[ustack];" /* AArch32 SP_usr */
+        "mov    x14, %[entry];" /* AArch32 LR_usr */
         "mov    sp, %[kstack];"
-        "msr    sp_el0, %[ustack];"
+        "msr    sp_el0, %[ustack];" /* AArch64 SP_usr */
         "msr    elr_el1, %[entry];"
         "msr    spsr_el1, %[spsr];"
         "eret;"
         :
-        : [ustack]"r"(user_stack_top),
+        : [arg0]"r"(arg0),
+        [ustack]"r"(user_stack_top),
         [kstack]"r"(kernel_stack_top),
         [entry]"r"(entry_point),
         [spsr]"r"(spsr)
-        : "memory");
+        : "x0", "x13", "x14", "memory");
     __UNREACHABLE;
 }
 
