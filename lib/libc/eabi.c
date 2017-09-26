@@ -44,6 +44,23 @@ _Unwind_Reason_Code __aeabi_unwind_cpp_pr2(_Unwind_State state, _Unwind_Control_
     return _URC_FAILURE;
 }
 
+#elif  defined(__clang__) && defined(__arm__)
+
+_Unwind_Reason_Code __aeabi_unwind_cpp_pr0(_Unwind_State state, void *ucbp, struct _Unwind_Context *context)
+{
+    return _URC_FAILURE;
+}
+
+_Unwind_Reason_Code __aeabi_unwind_cpp_pr1(_Unwind_State state, void *ucbp, struct _Unwind_Context *context)
+{
+    return _URC_FAILURE;
+}
+
+_Unwind_Reason_Code __aeabi_unwind_cpp_pr2(_Unwind_State state, void  *ucbp, struct  _Unwind_Context *context)
+{
+    return _URC_FAILURE;
+}
+
 #endif
 
 /* needed by some piece of EABI */
