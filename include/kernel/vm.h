@@ -256,7 +256,15 @@ status_t vmm_alloc_contiguous(vmm_aspace_t *aspace, const char *name, size_t siz
 /* allocate a region of memory backed by newly allocated physical memory */
 status_t vmm_alloc(vmm_aspace_t *aspace, const char *name, size_t size, void **ptr, uint8_t align_log2, uint vmm_flags, uint arch_mmu_flags);
 
-/* Unmap previously allocated region and free physical memory pages backing it (if any) */
+#define VMM_FREE_REGION_FLAG_EXPAND 0x1
+
+/* Unmap previously allocated region and free physical memory pages backing it (if any).
+   If flags is 0, va and size must match entire region.
+   If flags is VMM_FREE_REGION_FLAG_EXPAND, free entire region containin [va, va+size-1] */
+status_t vmm_free_region_etc(vmm_aspace_t *aspace, vaddr_t va, size_t size, uint32_t flags);
+
+/* Unmap previously allocated region and free physical memory pages backing it (if any).
+   va can be anywhere in region. */
 status_t vmm_free_region(vmm_aspace_t *aspace, vaddr_t va);
 
 /* For the above region creation routines. Allocate virtual space at the passed in pointer. */

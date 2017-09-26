@@ -604,14 +604,26 @@ static vmm_region_t *vmm_find_region(const vmm_aspace_t *aspace, vaddr_t vaddr)
     return NULL;
 }
 
-status_t vmm_free_region(vmm_aspace_t *aspace, vaddr_t vaddr)
+static bool vmm_region_is_match(vmm_region_t *r, vaddr_t va, size_t size, uint32_t flags)
+{
+    if (!r) {
+        return false;
+    }
+    if (flags & VMM_FREE_REGION_FLAG_EXPAND) {
+        return r->base <= va && (va + size - 1) <= (r->base + r->size - 1);
+    } else {
+        return r->base == va && r->size == size;
+    }
+}
+
+status_t vmm_free_region_etc(vmm_aspace_t *aspace, vaddr_t vaddr, size_t size, uint32_t flags)
 {
     DEBUG_ASSERT(aspace);
 
     mutex_acquire(&vmm_lock);
 
     vmm_region_t *r = vmm_find_region (aspace, vaddr);
-    if (!r) {
+    if (!vmm_region_is_match(r, vaddr, size, flags)) {
         mutex_release(&vmm_lock);
         return ERR_NOT_FOUND;
     }
@@ -631,6 +643,11 @@ status_t vmm_free_region(vmm_aspace_t *aspace, vaddr_t vaddr)
     free(r);
 
     return NO_ERROR;
+}
+
+status_t vmm_free_region(vmm_aspace_t *aspace, vaddr_t vaddr)
+{
+    return vmm_free_region_etc(aspace, vaddr, 1, VMM_FREE_REGION_FLAG_EXPAND);
 }
 
 status_t vmm_create_aspace(vmm_aspace_t **_aspace, const char *name, uint flags)
