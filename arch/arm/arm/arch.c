@@ -437,7 +437,20 @@ void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top, uint32_t fla
         "ldmia  %[ustack], { sp }^;"
         "msr	spsr, %[spsr];"
         "mov	sp, %[kstack];"
-        "movs	pc, %[entry];"
+        "mov    lr, %[entry];"
+        "mov    r1, #0;"
+        "mov    r2, #0;"
+        "mov    r3, #0;"
+        "mov    r4, #0;"
+        "mov    r5, #0;"
+        "mov    r6, #0;"
+        "mov    r7, #0;"
+        "mov    r8, #0;"
+        "mov    r9, #0;"
+        "mov    r10, #0;"
+        "mov    r11, #0;"
+        "mov    r12, #0;"
+        "movs   pc, lr;"
         :
         : [arg0]"r"(arg0),
         [ustack]"r"(&user_stack_top),
