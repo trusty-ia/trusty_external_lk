@@ -53,7 +53,8 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/gdt.S \
 	$(LOCAL_DIR)/thread.c \
 	$(LOCAL_DIR)/descriptor.c \
-	$(LOCAL_DIR)/fpu.c
+	$(LOCAL_DIR)/fpu.c \
+	$(LOCAL_DIR)/local_apic.c
 
 ifeq ($(WITH_SMP), 1)
 
@@ -62,7 +63,6 @@ GLOBAL_DEFINES += \
 	SMP_MAX_CPUS=$(SMP_MAX_CPUS)
 
 MODULE_SRCS += \
-	$(LOCAL_DIR)/local_apic.c \
 	$(SUBARCH_DIR)/start16.S
 
 else
