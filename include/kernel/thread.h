@@ -181,10 +181,6 @@ void thread_preempt(void); /* get preempted (inserted into head of run queue) */
 void thread_block(void); /* block on something and reschedule */
 void thread_unblock(thread_t *t, bool resched); /* go back in the run queue */
 
-#ifdef WITH_LIB_UTHREAD
-void uthread_context_switch(thread_t *oldthread, thread_t *newthread);
-#endif
-
 /* called on every timer tick for the scheduler to do quantum expiration */
 enum handler_return thread_timer_tick(void);
 

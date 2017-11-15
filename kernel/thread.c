@@ -675,10 +675,6 @@ void thread_resched(void)
     }
 #endif
 
-#ifdef WITH_LIB_UTHREAD
-    uthread_context_switch(oldthread, newthread);
-#endif
-
 #if WITH_KERNEL_VM
     /* see if we need to swap mmu context */
     if (newthread->aspace != oldthread->aspace) {
