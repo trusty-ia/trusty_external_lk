@@ -152,7 +152,7 @@ typedef tss_64_t tss_t;
 #define X86_CR4_SMEP            0x00100000 /* SMEP protection enabling */
 #define X86_CR4_SMAP            0x00200000 /* SMAP protection enabling */
 #define x86_EFER_NXE            0x00000800 /* to enable execute disable bit */
-#define x86_MSR_EFER            0xc0000080 /* EFER Model Specific Register id */
+#define X86_MSR_EFER            0xc0000080 /* EFER Model Specific Register id */
 #define X86_MSR_GS_BASE         0xc0000101 /* Map of base address of GS */
 #define X86_MSR_KRNL_GS_BASE    0xc0000102 /* Swap target of base address of GS */
 #define X86_CR4_PSE             0xffffffef /* Disabling PSE bit in the CR4 */
