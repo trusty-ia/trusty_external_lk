@@ -207,7 +207,7 @@ static void arm_gic_suspend_cpu(uint level)
 }
 
 LK_INIT_HOOK_FLAGS(arm_gic_suspend_cpu, arm_gic_suspend_cpu,
-                   LK_INIT_LEVEL_PLATFORM, LK_INIT_FLAG_CPU_SUSPEND);
+                   LK_INIT_LEVEL_PLATFORM, LK_INIT_FLAG_CPU_OFF);
 
 static void arm_gic_resume_cpu(uint level)
 {
@@ -223,7 +223,7 @@ static void arm_gic_resume_cpu(uint level)
         arm_gic_init_percpu(0);
     }
     spin_unlock_restore(&gicd_lock, state, GICD_LOCK_FLAGS);
-    suspend_resume_fiq(true, resume_gicd);
+    suspend_resume_fiq(false, resume_gicd);
 }
 
 LK_INIT_HOOK_FLAGS(arm_gic_resume_cpu, arm_gic_resume_cpu,
@@ -527,6 +527,13 @@ long smc_intc_request_fiq(smc32_args_t *args)
     return NO_ERROR;
 }
 
+long smc_intc_fiq_resume(smc32_args_t *args)
+{
+    suspend_resume_fiq(true, false);
+
+    return 0;
+}
+
 static u_int current_fiq[8] = { 0x3ff, 0x3ff, 0x3ff, 0x3ff, 0x3ff, 0x3ff, 0x3ff, 0x3ff };
 
 static bool update_fiq_targets(u_int cpu, bool enable, u_int triggered_fiq, bool resume_gicd)
@@ -550,7 +557,7 @@ static bool update_fiq_targets(u_int cpu, bool enable, u_int triggered_fiq, bool
             if (smp)
                 arm_gic_set_target_locked(fiq, 1U << cpu, enable ? ~0 : 0);
             if (!smp || resume_gicd)
-                gic_set_enable(fiq, enable);
+                gic_set_enable(fiq, enable || smp);
         }
     }
     spin_unlock(&gicd_lock);
