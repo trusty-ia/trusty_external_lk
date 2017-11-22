@@ -140,7 +140,7 @@ typedef struct pmm_arena {
 /* Add a pre-filled memory arena to the physical allocator. */
 status_t pmm_add_arena(pmm_arena_t *arena);
 
-/* Allocate count pages of physical memory, adding to the tail of the passed list.
+/* Allocate and clear count pages of physical memory, adding to the tail of the passed list.
  * The list must be initialized.
  * Returns the number of pages allocated.
  */
@@ -149,6 +149,7 @@ size_t pmm_alloc_pages(uint count, struct list_node *list);
 /* Allocate a specific range of physical pages, adding to the tail of the passed list.
  * The list must be initialized.
  * Returns the number of pages allocated.
+ * NOTE: This function does not clear the allocated pages
  */
 size_t pmm_alloc_range(paddr_t address, uint count, struct list_node *list);
 
@@ -160,13 +161,13 @@ size_t pmm_free(struct list_node *list);
 /* Helper routine for the above. */
 size_t pmm_free_page(vm_page_t *page);
 
-/* Allocate a run of contiguous pages, aligned on log2 byte boundary (0-31)
+/* Allocate and clear a run of contiguous pages, aligned on log2 byte boundary (0-31)
  * If the optional physical address pointer is passed, return the address.
  * If the optional list is passed, append the allocate page structures to the tail of the list.
  */
 size_t pmm_alloc_contiguous(uint count, uint8_t align_log2, paddr_t *pa, struct list_node *list);
 
-/* Allocate a run of pages out of the kernel area and return the pointer in kernel space.
+/* Allocate and clear a run of pages out of the kernel area and return the pointer in kernel space.
  * If the optional list is passed, append the allocate page structures to the tail of the list.
  */
 void *pmm_alloc_kpages(uint count, struct list_node *list);

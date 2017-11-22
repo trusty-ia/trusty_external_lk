@@ -55,6 +55,20 @@ static inline bool page_is_free(const vm_page_t *page)
     return !(page->flags & VM_PAGE_FLAG_NONFREE);
 }
 
+static void clear_page(vm_page_t *page)
+{
+    paddr_t pa;
+    void *kva;
+
+    pa = vm_page_to_paddr(page);
+    ASSERT(pa != (paddr_t)-1);
+
+    kva = paddr_to_kvaddr(pa);
+    ASSERT(kva);
+
+    memset(kva, 0, PAGE_SIZE);
+}
+
 paddr_t vm_page_to_paddr(const vm_page_t *page)
 {
     DEBUG_ASSERT(page);
@@ -146,6 +160,8 @@ size_t pmm_alloc_pages(uint count, struct list_node *list)
             vm_page_t *page = list_remove_head_type(&a->free_list, vm_page_t, node);
             if (!page)
                 goto done;
+
+            clear_page(page);
 
             a->free_count--;
 
@@ -349,6 +365,8 @@ retry:
                     list_delete(&p->node);
                     p->flags |= VM_PAGE_FLAG_NONFREE;
                     a->free_count--;
+
+                    clear_page(p);
 
                     if (list)
                         list_add_tail(list, &p->node);
