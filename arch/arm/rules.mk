@@ -241,6 +241,7 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/arm/debug.c \
 	$(LOCAL_DIR)/arm/ops.S \
 	$(LOCAL_DIR)/arm/exceptions.S \
+	$(LOCAL_DIR)/arm/usercopy.S \
 	$(LOCAL_DIR)/arm/faults.c \
 	$(LOCAL_DIR)/arm/fpu.c \
 	$(LOCAL_DIR)/arm/mmu.c \

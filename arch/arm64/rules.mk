@@ -17,6 +17,7 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/spinlock.S \
 	$(LOCAL_DIR)/start.S \
 	$(LOCAL_DIR)/cache-ops.S \
+	$(LOCAL_DIR)/usercopy.S \
 
 #	$(LOCAL_DIR)/arm/start.S \
 	$(LOCAL_DIR)/arm/cache.c \
