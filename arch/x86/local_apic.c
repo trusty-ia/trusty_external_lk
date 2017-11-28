@@ -26,8 +26,9 @@ typedef enum {
     LAPIC_ID_REG            = 0x2,
     LAPIC_EOI               = 0xB,
     LAPIC_SIVR              = 0xF,
-    LAPIC_INTR_CMD_REG      = 0x30, /* 64-bits in x2APIC*/
-    LAPIC_INTR_CMD_HI_REG   = 0x31, /* not available in x2APIC*/
+    LAPIC_INTR_CMD_REG      = 0x30, /* 64-bits in x2APIC */
+    LAPIC_INTR_CMD_HI_REG   = 0x31, /* not available in x2APIC */
+    LAPIC_SELF_IPI_REG      = 0x3F /* not available in xAPIC */
 } lapic_reg_id_t;
 
 #define PAGE_4K_MASK 0xfffULL
@@ -51,6 +52,7 @@ typedef enum {
 #define APIC_DM_STARTUP 0x600
 #define APIC_LEVEL_ASSERT 0x4000
 #define APIC_DEST_NOSHORT 0x00000
+#define APIC_DEST_SELF    0x40000
 #define APIC_DEST_EXCLUDE 0xC0000
 
 static volatile uint64_t lapic_base_virtual_addr = 0;
@@ -264,4 +266,24 @@ static void lapic_software_enable_lapic(void)
 void lapic_software_disable(void)
 {
     lapic_x1_write_reg(LAPIC_SIVR, 0xFF);
+}
+
+bool send_self_ipi(uint32_t vector)
+{
+    uint32_t icr_low = APIC_DEST_SELF|APIC_LEVEL_ASSERT|APIC_DM_FIXED|vector;
+    uint64_t apic_base_msr = read_msr(MSR_APIC_BASE);
+
+    if (!(apic_base_msr & LAPIC_ENABLED)) {
+        return false;
+    }
+
+    if (apic_base_msr & LAPIC_X2_ENABLED) {
+        lapic_x2_write_reg(LAPIC_SELF_IPI_REG, (uint64_t)vector);
+    } else {
+        //need wait in x1 APIC only.
+        lapic_x1_wait_for_ipi();
+        lapic_x1_write_reg(LAPIC_INTR_CMD_REG, icr_low);
+    }
+
+    return true;
 }
