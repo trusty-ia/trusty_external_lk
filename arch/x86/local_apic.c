@@ -21,6 +21,7 @@
 #include <arch/local_apic.h>
 #include <kernel/vm.h>
 #include <platform/sand_defs.h>
+#include <platform/vmcall.h>
 
 typedef enum {
     LAPIC_ID_REG            = 0x2,
@@ -165,6 +166,10 @@ void local_apic_init(void)
     range.start_paddr = (map_addr_t)lapic_base_phy_addr;
     range.size        = PAGE_SIZE;
     x86_mmu_map_range(pml4_table, &range, access);
+
+#ifdef EPT_DEBUG
+    make_ept_update_vmcall(ADD, lapic_base_phy_addr, PAGE_SIZE);
+#endif
 
     lapic_base_virtual_addr = range.start_vaddr;
 }
