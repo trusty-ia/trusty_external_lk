@@ -57,14 +57,14 @@
     addl $4, %eax
     loop 2b
 
-    /* save g_dev_info in local */
+    /* save g_sec_info in local */
     movl PHYS(g_trusty_startup_info + 16)(%ebp), %esi
-    lea PHYS(g_dev_info_buf)(%ebp), %edi
+    lea PHYS(g_sec_info_buf)(%ebp), %edi
     movl $4096, %ecx
     shrl $2, %ecx
     rep movsl
 
-    /* clear previous g_dev_info */
+    /* clear previous g_sec_info */
     movl PHYS(g_trusty_startup_info + 16)(%ebp), %eax
     movl $4096, %ecx
     shrl $2, %ecx
