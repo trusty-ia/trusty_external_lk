@@ -41,11 +41,137 @@
 #define PTD_SHIFT        12
 #define PTRS_MASK     (512 - 1)
 
+.macro save_info
+    /* save g_trusty_startup_info in local */
+    movl %edi, %esi
+    lea PHYS(g_trusty_startup_info)(%ebp), %edi
+    movl $32, %ecx
+    shrl $2, %ecx
+    rep movsl
+
+    /* clear previous g_trusty_startup_info */
+    movl $32, %ecx
+    shrl $2, %ecx
+2:
+    movl $0, (%eax)
+    addl $4, %eax
+    loop 2b
+
+    /* save g_dev_info in local */
+    movl PHYS(g_trusty_startup_info + 16)(%ebp), %esi
+    lea PHYS(g_dev_info_buf)(%ebp), %edi
+    movl $4096, %ecx
+    shrl $2, %ecx
+    rep movsl
+
+    /* clear previous g_dev_info */
+    movl PHYS(g_trusty_startup_info + 16)(%ebp), %eax
+    movl $4096, %ecx
+    shrl $2, %ecx
+2:
+    movl $0, (%eax)
+    addl $4, %eax
+    loop 2b
+.endm
+
 .macro pg_shift src, dst, imm
     movq %\src, %\dst
     shrq $\imm, %\dst
     andq $PTRS_MASK, %\dst
     shlq $3, %\dst
+.endm
+
+.macro bootstrap_page_init
+    /*
+     ************************
+     * map the early bootstrap, 2M leaf
+     ************************
+     */
+    lea PHYS(pml4)(%ebp), %edi
+    lea PHYS(pdp_bootstrap)(%ebp), %esi
+    orl $X86_KERNEL_PD_FLAGS, %esi
+    movl %esi, (%edi)
+
+    /* map the first 4GB in this table */
+    lea PHYS(pdp_bootstrap)(%ebp), %edi
+    lea PHYS(pde_bootstrap)(%ebp), %esi
+    orl  $X86_KERNEL_PD_FLAGS, %esi
+    movl $4, %ecx
+0:
+    movl %esi, (%edi)
+    add  $8, %edi
+    addl $4096, %esi
+    loop 0b
+
+    lea PHYS(pde_bootstrap)(%ebp), %edi
+    movl $2048, %ecx
+    xor  %eax, %eax
+
+    /* loop across these page tables, incrementing the address by 2MB */
+0:
+    mov  %eax, %ebx
+    shll $21, %ebx
+    orl  $X86_KERNEL_PD_LP_FLAGS, %ebx    # lower word of the entry
+    movl %ebx, (%edi)
+    mov  %eax, %ebx
+    shrl $11, %ebx      # upper word of the entry
+    movl %ebx, 4(%edi)
+    addl $8,%edi
+    inc  %eax
+    loop 0b
+.endm
+
+.macro page_table_init
+    /*
+     * start to map the kernel region, 4K leaf
+     * get the offset from run addr to mem base
+     */
+    movq g_trusty_startup_info + 16(%rip), %rbp
+    leaq _start(%rip), %rax
+    subq %rbp, %rax
+    movq $_start, %rbp
+    subq %rax, %rbp
+
+    pg_shift rbp, rax, PGDIR_SHIFT
+    leaq pml4(%rip), %rdi
+    addq %rax, %rdi
+    leaq pdp_high(%rip), %rsi
+    orq $X86_KERNEL_PD_FLAGS, %rsi
+    movq %rsi, (%rdi)
+
+    pg_shift rbp, rax, PUD_SHIFT
+    leaq pdp_high(%rip), %rdi
+    addq %rax, %rdi
+    leaq pde_kernel(%rip), %rsi
+    orq $X86_KERNEL_PD_FLAGS, %rsi
+    movq %rsi, (%rdi)
+
+    pg_shift rbp, rax, PMD_SHIFT
+    leaq pde_kernel(%rip), %rdi
+    addq %rax, %rdi
+    leaq pte_kernel(%rip), %rsi
+    orq  $X86_KERNEL_PD_FLAGS, %rsi
+    movq $8, %rcx
+
+0:
+    movq %rsi, (%rdi)
+    addq  $8, %rdi
+    addq $4096, %rsi
+    loop 0b
+
+    pg_shift rbp, rax, PTD_SHIFT
+    leaq pte_kernel(%rip), %rdi
+    addq %rax, %rdi
+    movq g_trusty_startup_info + 16(%rip), %rsi
+    addq $8, %rcx
+    shlq $9, %rcx
+
+0:
+    orq  $0x103, %rsi
+    movq %rsi, (%rdi)
+    addq $8,%rdi
+    addq $4096, %rsi
+    loop 0b
 .endm
 
 .section ".text.boot"
@@ -100,36 +226,7 @@ bss_setup:
 
     movl %edi, %eax
 
-    /* save g_trusty_startup_info in local */
-    movl %edi, %esi
-    lea PHYS(g_trusty_startup_info)(%ebp), %edi
-    movl $32, %ecx
-    shrl $2, %ecx
-    rep movsl
-
-    /* clear previous g_trusty_startup_info */
-    movl $32, %ecx
-    shrl $2, %ecx
-2:
-    movl $0, (%eax)
-    addl $4, %eax
-    loop 2b
-
-    /* save g_dev_info in local */
-    movl PHYS(g_trusty_startup_info + 16)(%ebp), %esi
-    lea PHYS(g_dev_info_buf)(%ebp), %edi
-    movl $4096, %ecx
-    shrl $2, %ecx
-    rep movsl
-
-    /* clear previous g_dev_info */
-    movl PHYS(g_trusty_startup_info + 16)(%ebp), %eax
-    movl $4096, %ecx
-    shrl $2, %ecx
-2:
-    movl $0, (%eax)
-    addl $4, %eax
-    loop 2b
+    save_info
 
 paging_setup:
     /* Preparing 64 bit paging, we will use 2MB pages covering 4GB
@@ -156,43 +253,7 @@ paging_setup:
     movl $CACHE_MODE, %edx
     wrmsr
 
-    /*
-     ************************
-     * map the early bootstrap, 2M leaf
-     ************************
-     */
-    lea PHYS(pml4)(%ebp), %edi
-    lea PHYS(pdp_bootstrap)(%ebp), %esi
-    orl $X86_KERNEL_PD_FLAGS, %esi
-    movl %esi, (%edi)
-
-    /* map the first 4GB in this table */
-    lea PHYS(pdp_bootstrap)(%ebp), %edi
-    lea PHYS(pde_bootstrap)(%ebp), %esi
-    orl  $X86_KERNEL_PD_FLAGS, %esi
-    movl $4, %ecx
-0:
-    movl %esi, (%edi)
-    add  $8, %edi
-    addl $4096, %esi
-    loop 0b
-
-    lea PHYS(pde_bootstrap)(%ebp), %edi
-    movl $2048, %ecx
-    xor  %eax, %eax
-
-    /* loop across these page tables, incrementing the address by 2MB */
-0:
-    mov  %eax, %ebx
-    shll $21, %ebx
-    orl  $X86_KERNEL_PD_LP_FLAGS, %ebx    # lower word of the entry
-    movl %ebx, (%edi)
-    mov  %eax, %ebx
-    shrl $11, %ebx      # upper word of the entry
-    movl %ebx, 4(%edi)
-    addl $8,%edi
-    inc  %eax
-    loop 0b
+    bootstrap_page_init
 
     /*
      *Enabling Paging and from this point we are in
@@ -214,56 +275,7 @@ paging_setup:
 .align 8
 .code64
 farjump64:
-    /*
-     * start to map the kernel region, 4K leaf
-     * get the offset from run addr to mem base
-     */
-    movq g_trusty_startup_info + 16(%rip), %rbp
-    leaq _start(%rip), %rax
-    subq %rbp, %rax
-    movq $_start, %rbp
-    subq %rax, %rbp
-
-    pg_shift rbp, rax, PGDIR_SHIFT
-    leaq pml4(%rip), %rdi
-    addq %rax, %rdi
-    leaq pdp_high(%rip), %rsi
-    orq $X86_KERNEL_PD_FLAGS, %rsi
-    movq %rsi, (%rdi)
-
-    pg_shift rbp, rax, PUD_SHIFT
-    leaq pdp_high(%rip), %rdi
-    addq %rax, %rdi
-    leaq pde_kernel(%rip), %rsi
-    orq $X86_KERNEL_PD_FLAGS, %rsi
-    movq %rsi, (%rdi)
-
-    pg_shift rbp, rax, PMD_SHIFT
-    leaq pde_kernel(%rip), %rdi
-    addq %rax, %rdi
-    leaq pte_kernel(%rip), %rsi
-    orq  $X86_KERNEL_PD_FLAGS, %rsi
-    movq $8, %rcx
-
-0:
-    movq %rsi, (%rdi)
-    addq  $8, %rdi
-    addq $4096, %rsi
-    loop 0b
-
-    pg_shift rbp, rax, PTD_SHIFT
-    leaq pte_kernel(%rip), %rdi
-    addq %rax, %rdi
-    movq g_trusty_startup_info + 16(%rip), %rsi
-    addq $8, %rcx
-    shlq $9, %rcx
-
-0:
-    orq  $0x103, %rsi
-    movq %rsi, (%rdi)
-    addq $8,%rdi
-    addq $4096, %rsi
-    loop 0b
+    page_table_init
 
     /* save the run addr */
     leaq _start(%rip), %rax
@@ -317,6 +329,47 @@ highaddr:
     hlt                     /* interrupts will unhalt the processor */
     pause
     jmp 0b                  /* so jump back to halt to conserve power */
+
+.align 8
+.code64
+.org 0x400
+_startup_64:
+    call 1f
+1:
+    pop %rbp
+    subl $PHYS(1b), %ebp
+
+    /* zero the bss section */
+    lea __bss_start(%rip), %eax /* starting address of the bss */
+    lea __bss_end(%rip), %ecx   /* find the length of the bss in bytes */
+    subl %eax, %ecx
+    shrl $2, %ecx       /* convert to 32 bit words, since the bss is aligned anyway */
+2:
+    movl $0, (%eax)
+    addl $4, %eax
+    loop 2b
+
+    mov %edi, %eax
+
+    save_info
+
+    bootstrap_page_init
+
+    page_table_init
+
+    /* save the run addr */
+    leaq _start(%rip), %rax
+    movq %rax, real_run_addr(%rip)
+
+    leaq pml4(%rip), %rax
+    movq %rax, %cr3
+    /* load our gdtr */
+    lgdt _gdtr
+
+    /* long jump to our code selector and the high address */
+    push  $CODE_64_SELECTOR
+    push  $highaddr
+    lretq
 
 .global _start_pa
 .set _start_pa, _start - KERNEL_BASE
