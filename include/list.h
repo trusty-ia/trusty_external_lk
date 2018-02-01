@@ -25,12 +25,13 @@
 
 #include <compiler.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 __BEGIN_CDECLS;
 
 #define containerof(ptr, type, member) \
-    ((type *)((addr_t)(ptr) - offsetof(type, member)))
+    ((type *)((uintptr_t)(ptr) - offsetof(type, member)))
 
 struct list_node {
     struct list_node *prev;
