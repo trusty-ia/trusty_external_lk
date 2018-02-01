@@ -23,7 +23,7 @@
 #ifndef __LIST_H
 #define __LIST_H
 
-#include <compiler.h>
+#include <lk/compiler.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>

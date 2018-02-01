@@ -53,7 +53,15 @@ OUTBIN := $(BUILDDIR)/lk.bin
 OUTELF := $(BUILDDIR)/lk.elf
 CONFIGHEADER := $(BUILDDIR)/config.h
 
-GLOBAL_INCLUDES := $(BUILDDIR) $(addsuffix /include,$(LKINC))
+GLOBAL_UAPI_INCLUDES := $(addsuffix /include/uapi,$(LKINC))
+GLOBAL_SHARED_INCLUDES := $(addsuffix /include/shared,$(LKINC))
+GLOBAL_USER_INCLUDES := $(addsuffix /include/user,$(LKINC))
+# For backwards compatibility.
+# TODO: shift into GLOBAL_INCLUDES once all apps have been updated.
+GLOBAL_SHARED_INCLUDES += $(addsuffix /include/shared/lk,$(LKINC))
+GLOBAL_UAPI_INCLUDES += $(addsuffix /include/uapi/uapi,$(LKINC))
+# TODO: remove $(GLOBAL_USER_INCLUDES) from kernel build.
+GLOBAL_INCLUDES := $(BUILDDIR) $(addsuffix /include,$(LKINC)) $(GLOBAL_UAPI_INCLUDES) $(GLOBAL_SHARED_INCLUDES) $(GLOBAL_USER_INCLUDES)
 GLOBAL_OPTFLAGS ?= $(ARCH_OPTFLAGS)
 GLOBAL_COMPILEFLAGS := -g -finline -include $(CONFIGHEADER)
 GLOBAL_COMPILEFLAGS += -W -Wall -Wno-multichar -Wno-unused-parameter -Wno-unused-function -Wno-unused-label -Werror=return-type
