@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <debug.h>
 #include <assert.h>
 #include <limits.h>
 #include <printf.h>
@@ -28,7 +27,6 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <string.h>
-#include <platform/debug.h>
 
 #if WITH_NO_FP
 #define FLOAT_PRINTF 0

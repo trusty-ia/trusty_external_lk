@@ -22,9 +22,8 @@
  */
 #include <lib/io.h>
 
-#include <err.h>
+#include <uapi/err.h>
 #include <ctype.h>
-#include <debug.h>
 #include <assert.h>
 
 ssize_t io_write(io_handle_t *io, const char *buf, size_t len)
