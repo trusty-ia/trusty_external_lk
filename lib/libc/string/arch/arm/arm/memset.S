@@ -21,7 +21,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <asm.h>
-#include <arch/arm/cores.h>
 
 .text
 .align 2

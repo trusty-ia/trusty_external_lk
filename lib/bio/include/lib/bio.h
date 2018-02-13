@@ -22,6 +22,7 @@
  */
 #pragma once
 
+#include <arch/defines.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <list.h>
@@ -31,6 +32,10 @@ __BEGIN_CDECLS;
 #define BIO_FLAGS_NONE                (0 << 0)
 #define BIO_FLAG_CACHE_ALIGNED_READS  (1 << 0)
 #define BIO_FLAG_CACHE_ALIGNED_WRITES (1 << 1)
+
+/* allocate a buffer on the stack aligned and padded to the cpu's cache line size */
+#define STACKBUF_DMA_ALIGN(var, size) \
+    uint8_t var[ROUNDUP(size, CACHE_LINE)] __ALIGNED(CACHE_LINE);
 
 typedef uint32_t bnum_t;
 
