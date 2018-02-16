@@ -133,6 +133,10 @@ BUILDID ?=
 # comment out or override if you want to see the full output of each command
 NOECHO ?= @
 
+# default to building with clang
+CLANGBUILD ?= true
+override CLANGBUILD := $(call TOBOOL,$(CLANGBUILD))
+
 # try to include the project file
 -include project/$(PROJECT).mk
 ifndef TARGET
