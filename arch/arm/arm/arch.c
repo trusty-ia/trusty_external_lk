@@ -432,7 +432,7 @@ void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top, uint32_t fla
 
     arch_disable_ints();
 
-    asm volatile(
+    __asm__ volatile(
         "mov    r0, %[arg0];"
         "ldmia  %[ustack], { sp }^;"
         "msr	spsr, %[spsr];"

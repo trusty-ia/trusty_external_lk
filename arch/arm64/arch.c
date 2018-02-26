@@ -116,7 +116,7 @@ void arch_enter_uspace(vaddr_t entry_point, vaddr_t user_stack_top, uint32_t fla
 
     arch_disable_ints();
 
-    asm volatile(
+    __asm__ volatile(
         "mov    x0, %[arg0];"
         "mov    x13, %[ustack];" /* AArch32 SP_usr */
         "mov    x14, %[entry];" /* AArch32 LR_usr */

@@ -64,7 +64,7 @@ GLOBAL_OPTFLAGS ?= $(ARCH_OPTFLAGS)
 GLOBAL_COMPILEFLAGS := -g -finline -include $(CONFIGHEADER)
 GLOBAL_COMPILEFLAGS += -Werror -Wall -Wsign-compare -Wno-multichar -Wno-unused-function -Wno-unused-label -Wno-tautological-compare
 GLOBAL_COMPILEFLAGS += -fno-short-enums -fno-common
-GLOBAL_CFLAGS := --std=gnu11 -Wstrict-prototypes -Wwrite-strings
+GLOBAL_CFLAGS := --std=c11 -Wstrict-prototypes -Wwrite-strings
 GLOBAL_CPPFLAGS := --std=c++11 -fno-exceptions -fno-rtti -fno-threadsafe-statics
 #GLOBAL_CPPFLAGS += -Weffc++
 GLOBAL_ASMFLAGS := -DASSEMBLY
