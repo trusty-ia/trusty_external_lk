@@ -102,6 +102,8 @@ ifeq ($(ARM_CPU),cortex-a15)
 ARCH_arm_COMPILEFLAGS += -mcpu=$(ARM_CPU)
 ifneq ($(ARM_WITHOUT_VFP_NEON),true)
 ARCH_arm_COMPILEFLAGS += -mfpu=vfpv3 -mfloat-abi=softfp
+else
+ARCH_arm_COMPILEFLAGS += -mfloat-abi=soft
 endif
 endif
 ifeq ($(ARM_CPU),arm1136j-s)
@@ -117,6 +119,8 @@ ifeq ($(ARM_CPU),armv8-a)
 ARCH_arm_COMPILEFLAGS += -march=$(ARM_CPU)
 ifneq ($(ARM_WITHOUT_VFP_NEON),true)
 ARCH_arm_COMPILEFLAGS += -mfpu=vfpv3 -mfloat-abi=softfp
+else
+ARCH_arm_COMPILEFLAGS += -mfloat-abi=soft
 endif
 endif
 

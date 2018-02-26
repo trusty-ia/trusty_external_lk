@@ -62,8 +62,8 @@ GLOBAL_USER_INCLUDES := $(addsuffix /include/user,$(LKINC))
 GLOBAL_INCLUDES := $(BUILDDIR) $(GLOBAL_UAPI_INCLUDES) $(GLOBAL_SHARED_INCLUDES) $(GLOBAL_KERNEL_INCLUDES)
 GLOBAL_OPTFLAGS ?= $(ARCH_OPTFLAGS)
 GLOBAL_COMPILEFLAGS := -g -finline -include $(CONFIGHEADER)
-GLOBAL_COMPILEFLAGS += -W -Wall -Wno-multichar -Wno-unused-parameter -Wno-unused-function -Wno-unused-label -Werror=return-type
-GLOBAL_COMPILEFLAGS += -fno-common
+GLOBAL_COMPILEFLAGS += -Wall -Wsign-compare -Wno-multichar -Wno-unused-function -Wno-unused-label -Wno-tautological-compare -Werror=return-type
+GLOBAL_COMPILEFLAGS += -fno-short-enums -fno-common
 GLOBAL_CFLAGS := --std=gnu11 -Werror-implicit-function-declaration -Wstrict-prototypes -Wwrite-strings
 #GLOBAL_CFLAGS += -Werror
 GLOBAL_CPPFLAGS := --std=c++11 -fno-exceptions -fno-rtti -fno-threadsafe-statics
