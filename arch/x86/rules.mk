@@ -54,7 +54,8 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/gdt.S \
 	$(LOCAL_DIR)/thread.c \
 	$(LOCAL_DIR)/descriptor.c \
-	$(LOCAL_DIR)/fpu.c
+	$(LOCAL_DIR)/fpu.c \
+	$(LOCAL_DIR)/local_apic.c
 
 ifeq (true,$(call TOBOOL,$(STACK_PROTECTOR)))
 MODULE_SRCS += \
