@@ -30,6 +30,7 @@
 #include <kernel/thread.h>
 #include <kernel/debug.h>
 #include <lk/init.h>
+#include <lk/macros.h>
 #include <platform/interrupts.h>
 #include <arch/ops.h>
 #include <platform/gic.h>
@@ -162,7 +163,6 @@ void register_int_handler(unsigned int vector, int_handler handler, void *arg)
 #define GICD_CPENDSGIR(n)       (GICD_OFFSET + 0xf10 + (n) * 4)
 #define GICD_SPENDSGIR(n)       (GICD_OFFSET + 0xf20 + (n) * 4)
 
-#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
 #define GIC_REG_COUNT(bit_per_reg) DIV_ROUND_UP(MAX_INT, (bit_per_reg))
 #define DEFINE_GIC_SHADOW_REG(name, bit_per_reg, init_val, init_from) \
     uint32_t (name)[GIC_REG_COUNT(bit_per_reg)] = { \

@@ -29,6 +29,8 @@
 #define ROUNDUP(a, b) (((a) + ((b)-1)) & ~((b)-1))
 #define ROUNDDOWN(a, b) ((a) & ~((b)-1))
 
+#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
+
 #define ALIGN(a, b) ROUNDUP(a, b)
 #define IS_ALIGNED(a, b) (!(((uintptr_t)(a)) & (((uintptr_t)(b))-1)))
 
