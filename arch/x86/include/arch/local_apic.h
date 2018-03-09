@@ -27,8 +27,6 @@ bool broadcast_startup(uint32_t vector);
 bool send_nmi(uint32_t lapic_id);
 bool send_startup(uint32_t lapic_id, uint32_t vector);
 
-bool send_reschedule_ipi(uint32_t cpuid);
-
 // need to be called for all cpus
 void lapic_id_init(void);
 void local_apic_init(void);

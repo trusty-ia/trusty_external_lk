@@ -20,7 +20,6 @@
 #include <arch/arch_ops.h>
 #include <arch/local_apic.h>
 #include <kernel/vm.h>
-#include <platform/sand_defs.h>
 #include <platform/vmcall.h>
 
 typedef enum {
@@ -236,33 +235,11 @@ bool send_startup(uint32_t lapic_id, uint32_t vector)
     return lapic_send_ipi_to_cpu(lapic_id, APIC_DM_STARTUP, vector);
 }
 
-extern int32_t is_lk_boot_complete;
-bool send_reschedule_ipi(uint32_t cpuid)
-{
-    /*
-     * There should not any IPI at run time,
-     * since only one processor runs on run time due to
-     * Google Trusty SMC mechanism.
-     */
-    if (0 == is_lk_boot_complete) {
-        if (UINT32_MAX == cpuid) {
-            return lapic_send_ipi_excluding_self(APIC_DM_FIXED, INT_RESCH);
-        } else {
-            uint32_t lapic_id = get_lapic_id(cpuid);
-
-            return lapic_send_ipi_to_cpu(lapic_id, APIC_DM_FIXED, INT_RESCH);
-        }
-    }
-
-    return true;
-}
-
 void lapic_eoi(void)
 {
     lapic_x1_write_reg(LAPIC_EOI, 1);
 }
 
-// :TODO: remove hard code for following 2 APIs
 static void lapic_software_enable_lapic(void)
 {
     lapic_x1_write_reg(LAPIC_SIVR, 0x1FF);
