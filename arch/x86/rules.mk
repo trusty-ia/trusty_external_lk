@@ -56,6 +56,10 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/fpu.c \
 	$(LOCAL_DIR)/local_apic.c
 
+ifeq (true, $(WITH_CUSTOMIZED_BOOTSTRAP))
+MODULE_SRCS := $(filter-out $(SUBARCH_DIR)/start.S, $(MODULE_SRCS))
+endif
+
 ifeq ($(WITH_SMP), 1)
 
 GLOBAL_DEFINES += \
