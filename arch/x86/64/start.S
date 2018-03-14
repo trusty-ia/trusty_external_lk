@@ -353,7 +353,29 @@ _startup_64:
 
     save_info
 
-    bootstrap_page_init
+    /*
+     ************************
+     * map the early bootstrap, 1G leaf
+     ************************
+     */
+    leaq pml4(%rip), %rdi
+    leaq pdp_bootstrap(%rip), %rsi
+    orq $X86_KERNEL_PD_FLAGS, %rsi
+    movq %rsi, (%rdi)
+
+    leaq pdp_bootstrap(%rip), %rdi
+    movq $512, %rcx
+    xorq  %rax, %rax
+
+    /* loop across these page tables, incrementing the address by 1GB */
+0:
+    movq  %rax, %rbx
+    shlq $30, %rbx
+    orq  $X86_KERNEL_PD_LP_FLAGS, %rbx
+    movq %rbx, (%rdi)
+    addq $8, %rdi
+    incq  %rax
+    loop 0b
 
     page_table_init
 
