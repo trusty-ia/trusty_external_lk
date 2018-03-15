@@ -33,16 +33,7 @@
 #define __ALIGNED(x) __attribute__((aligned(x)))
 #define __PRINTFLIKE(__fmt,__varargs) __attribute__((__format__ (__printf__, __fmt, __varargs)))
 #define __SCANFLIKE(__fmt,__varargs) __attribute__((__format__ (__scanf__, __fmt, __varargs)))
-
-/*
- * The following takes effect only when compiling secvm.a on One Android
- * code base with Intel compiler.  ENABLE_LK is not defined when compiling
- * Trusty LK.
- */
-#ifndef ENABLE_LK
 #define __SECTION(x) __attribute((section(x)))
-#endif
-
 #define __PURE __attribute((pure))
 #define __CONST __attribute((const))
 #define __NO_RETURN __attribute__((noreturn))
@@ -107,20 +98,24 @@
 #define __WARN_UNUSED_RESULT
 #endif
 
-#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 1)
+#if ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 1) && !defined(__clang__))
 #define __EXTERNALLY_VISIBLE __attribute__((externally_visible))
 #else
 #define __EXTERNALLY_VISIBLE
 #endif
 
-#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
+#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5) || defined(__clang__)
 #define __UNREACHABLE __builtin_unreachable()
 #else
 #define __UNREACHABLE
 #endif
 
 #if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
+#ifdef __cplusplus
+#define STATIC_ASSERT(e) static_assert(e, #e)
+#else
 #define STATIC_ASSERT(e) _Static_assert(e, #e)
+#endif
 #else
 #define STATIC_ASSERT(e) extern char (*ct_assert(void)) [sizeof(char[1 - 2*!(e)])]
 #endif
@@ -162,10 +157,6 @@
 
 /* TODO: add type check */
 #define countof(a) (sizeof(a) / sizeof((a)[0]))
-
-/* macro-expanding concat */
-#define concat(a, b) __ex_concat(a, b)
-#define __ex_concat(a, b) a ## b
 
 /* CPP header guards */
 #ifdef __cplusplus
