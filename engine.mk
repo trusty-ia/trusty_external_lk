@@ -137,6 +137,10 @@ NOECHO ?= @
 CLANGBUILD ?= true
 override CLANGBUILD := $(call TOBOOL,$(CLANGBUILD))
 
+ifeq ($(call TOBOOL,$(CLANGBUILD)), true)
+GLOBAL_COMPILEFLAGS += -Wimplicit-fallthrough
+endif
+
 # try to include the project file
 -include project/$(PROJECT).mk
 ifndef TARGET
