@@ -74,6 +74,39 @@
     loop 2b
 .endm
 
+.macro save_info_64
+    /* save g_trusty_startup_info in local */
+    movq %rdi, %rsi
+    lea PHYS(g_trusty_startup_info)(%rbp), %rdi
+    movq $32, %rcx
+    shr $3, %rcx
+    rep movsq
+
+    /* clear previous g_trusty_startup_info */
+    movq $32, %rcx
+    shr $3, %rcx
+2:
+    movq $0, (%rax)
+    add $8, %rax
+    loop 2b
+
+    /* save g_sec_info in local */
+    movq PHYS(g_trusty_startup_info + 16)(%rbp), %rsi
+    lea PHYS(g_sec_info_buf)(%rbp), %rdi
+    movq $4096, %rcx
+    shr $3, %rcx
+    rep movsq
+
+    /* clear previous g_sec_info */
+    movq PHYS(g_trusty_startup_info + 16)(%rbp), %rax
+    movq $4096, %rcx
+    shr $3, %rcx
+2:
+    movq $0, (%rax)
+    add $8, %rax
+    loop 2b
+.endm
+
 .macro pg_shift src, dst, imm
     movq %\src, %\dst
     shrq $\imm, %\dst
@@ -337,21 +370,21 @@ _startup_64:
     call 1f
 1:
     pop %rbp
-    subl $PHYS(1b), %ebp
+    sub $PHYS(1b), %rbp
 
     /* zero the bss section */
-    lea __bss_start(%rip), %eax /* starting address of the bss */
-    lea __bss_end(%rip), %ecx   /* find the length of the bss in bytes */
-    subl %eax, %ecx
-    shrl $2, %ecx       /* convert to 32 bit words, since the bss is aligned anyway */
+    lea __bss_start(%rip), %rax /* starting address of the bss */
+    lea __bss_end(%rip), %rcx   /* find the length of the bss in bytes */
+    sub %rax, %rcx
+    shr $2, %rcx       /* convert to 32 bit words, since the bss is aligned anyway */
 2:
-    movl $0, (%eax)
-    addl $4, %eax
+    movq $0, (%rax)
+    add $4, %rax
     loop 2b
 
-    mov %edi, %eax
+    movq %rdi, %rax
 
-    save_info
+    save_info_64
 
     /*
      ************************
