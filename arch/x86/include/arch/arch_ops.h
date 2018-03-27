@@ -137,11 +137,11 @@ static inline uint arch_curr_cpu_num(void)
 #ifdef WITH_SMP
 #define smp_mb()    CF
 #define smp_wmb()   mb()
-#define smp_rmb()   CF
+#define smp_rmb()   rmb()
 #else
 #define smp_mb()    CF
 #define smp_wmb()   CF
-#define smp_rmb()   CF
+#define smp_rmb()   rmb()
 #endif
 
 #endif // !ASSEMBLY
