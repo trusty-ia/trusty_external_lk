@@ -459,14 +459,6 @@ static inline void x86_set_cr0(uint32_t in_val)
         :"r" (in_val));
 }
 
-static inline void x86_set_cr8(uint32_t in_val)
-{
-       __asm__ __volatile__ (
-               "mov %0,%%cr8 \n\t"
-               :
-               :"r" (in_val));
-}
-
 static inline uint32_t x86_get_address_width(void)
 {
     uint32_t rv;
@@ -811,14 +803,6 @@ static inline void x86_set_cr0(uint64_t in_val)
         "movq %0,%%cr0 \n\t"
         :
         :"r" (in_val));
-}
-
-static inline void x86_set_cr8(uint64_t in_val)
-{
-       __asm__ __volatile__ (
-               "movq %0, %%cr8 \n\t"
-               :
-               :"r" (in_val));
 }
 
 static inline uint32_t x86_get_address_width(void)
