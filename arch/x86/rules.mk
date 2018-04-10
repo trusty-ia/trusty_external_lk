@@ -98,7 +98,9 @@ $(warning ARCH_x86_TOOLCHAIN_PREFIX = $(ARCH_x86_TOOLCHAIN_PREFIX))
 $(warning ARCH_x86_64_TOOLCHAIN_PREFIX = $(ARCH_x86_64_TOOLCHAIN_PREFIX))
 $(warning TOOLCHAIN_PREFIX = $(TOOLCHAIN_PREFIX))
 
-LIBGCC := $(shell $(TOOLCHAIN_PREFIX)gcc $(CFLAGS) -print-libgcc-file-name)
+ifeq ($(call TOBOOL,$(CLANGBUILD)), true)
+ARCH_COMPILEFLAGS += $(ARCH_$(ARCH)_COMPILEFLAGS)
+endif
 
 cc-option = $(shell if test -z "`$(1) $(2) -S -o /dev/null -xc /dev/null 2>&1`"; \
 	then echo "$(2)"; else echo "$(3)"; fi ;)
@@ -121,17 +123,26 @@ GLOBAL_COMPILEFLAGS += -gdwarf-2
 GLOBAL_LDFLAGS += -z max-page-size=0x1000
 
 ifeq ($(SUBARCH),x86-64)
+ifeq ($(call TOBOOL,$(CLANGBUILD)), false)
 KERNEL_COMPILEFLAGS += -falign-jumps=1
 KERNEL_COMPILEFLAGS += -falign-loops=1
 KERNEL_COMPILEFLAGS += -falign-functions=4
+endif
 KERNEL_COMPILEFLAGS += -ffreestanding
+ifeq ($(call TOBOOL,$(CLANGBUILD)), false)
 KERNEL_COMPILEFLAGS += -mno-80387
 KERNEL_COMPILEFLAGS += -mno-fp-ret-in-387
+endif
 KERNEL_COMPILEFLAGS += -funit-at-a-time
 KERNEL_COMPILEFLAGS += -mcmodel=kernel
 KERNEL_COMPILEFLAGS += -mno-red-zone
+ifeq ($(call TOBOOL,$(CLANGBUILD)), false)
 KERNEL_COMPILEFLAGS += -mno-mmx -mno-3dnow -mno-avx -mno-avx2 -msoft-float
 KERNEL_COMPILEFLAGS += -march=core2 -maccumulate-outgoing-args -mfentry
+else
+KERNEL_COMPILEFLAGS += -msoft-float -mno-mmx -mno-sse -mno-sse2 -mno-3dnow -mno-avx -mno-avx2
+GLOBAL_COMPILEFLAGS += -march=x86-64 -mcx16
+endif
 endif # SUBARCH x86-64
 
 ARCH_OPTFLAGS := -O2
