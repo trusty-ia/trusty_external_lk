@@ -133,6 +133,10 @@ NOECHO ?= @
 
 # try to include the project file
 -include project/$(PROJECT).mk
+# default to building with clang
+#CLANGBUILD ?= true
+override CLANGBUILD := $(call TOBOOL,$(CLANGBUILD))
+
 ifndef TARGET
 $(error couldn't find project or project doesn't define target)
 endif
@@ -197,8 +201,17 @@ endif
 
 # default to no ccache
 CCACHE ?=
+ifeq ($(call TOBOOL,$(CLANGBUILD)), true)
+ifeq ($(CLANG_BINDIR),)
+$(error clang directory not specified, please set CLANG_BINDIR)
+endif
+CC := $(CCACHE) $(CLANG_BINDIR)/clang
+GLOBAL_COMPILEFLAGS += -no-integrated-as
+LD := $(TOOLCHAIN_PREFIX)ld.bfd
+else
 CC := $(CCACHE) $(TOOLCHAIN_PREFIX)gcc
 LD := $(TOOLCHAIN_PREFIX)ld
+endif
 AR := $(TOOLCHAIN_PREFIX)ar
 OBJDUMP := $(TOOLCHAIN_PREFIX)objdump
 OBJCOPY := $(TOOLCHAIN_PREFIX)objcopy
@@ -206,6 +219,8 @@ CPPFILT := $(TOOLCHAIN_PREFIX)c++filt
 SIZE := $(TOOLCHAIN_PREFIX)size
 NM := $(TOOLCHAIN_PREFIX)nm
 STRIP := $(TOOLCHAIN_PREFIX)strip
+
+LIBGCC := $(shell $(CC) $(GLOBAL_COMPILEFLAGS) $(ARCH_COMPILEFLAGS) $(THUMBCFLAGS) -print-libgcc-file-name)
 
 # try to have the compiler output colorized error messages if available
 export GCC_COLORS ?= 1
