@@ -312,7 +312,7 @@ farjump64:
 
     /* save the run addr */
     leaq _start(%rip), %rax
-    movq %rax, real_run_addr(%rip)
+    movq %rax, entry_phys(%rip)
 
     /* branch to our high address */
     mov  $highaddr, %rax
@@ -414,7 +414,7 @@ _startup_64:
 
     /* save the run addr */
     leaq _start(%rip), %rax
-    movq %rax, real_run_addr(%rip)
+    movq %rax, entry_phys(%rip)
 
     leaq pml4(%rip), %rax
     movq %rax, %cr3
