@@ -49,9 +49,8 @@ uint32_t last_size = 0;
 map_addr_t pml4[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE);
 map_addr_t pdp_bootstrap[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE); /* temporary */
 map_addr_t pde_bootstrap[(4ULL*GB) / (2*MB)] __ALIGNED(PAGE_SIZE); /* temporary */
-map_addr_t pde_kernel[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE);
-map_addr_t pte_kernel[NO_OF_PT_ENTRIES * 9] __ALIGNED(PAGE_SIZE);
 
+paddr_t x86_kernel_page_table = 0;
 /* top level pdp needed to map the -512GB..0 space */
 map_addr_t pdp_high[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE);
 
@@ -105,14 +104,9 @@ static bool x86_mmu_check_paddr(paddr_t paddr)
     return addr <= max_paddr;
 }
 
-
-extern volatile map_addr_t g_cr3;
 map_addr_t get_kernel_cr3(void)
 {
-    /*
-     * BSP invokes get_kernel_cr3 before g_cr3 initialized.
-     */
-    return g_cr3?g_cr3:x86_get_cr3();
+    return x86_kernel_page_table;
 }
 
 uint64_t get_pml4_entry_from_pml4_table(vaddr_t vaddr, addr_t pml4_addr)
@@ -790,8 +784,10 @@ void x86_mmu_early_init(void)
     /* unmap the lower identity mapping */
     //pml4[0] = 0;
 
+    x86_kernel_page_table = x86_get_cr3();
+
     /* tlb flush */
-    x86_set_cr3(x86_get_cr3());
+    x86_set_cr3(x86_kernel_page_table);
 }
 
 void x86_mmu_init(void)
