@@ -18,6 +18,10 @@
 #include <arch/x86.h>
 
 typedef struct x86_global_state {
+#if defined (STACK_PROTECTOR) && defined (__clang__)
+    uint8_t padding[40];
+    uint64_t stack_guard;
+#endif
     void *cur_thread;
     uint64_t syscall_stack;
 } x86_global_states_t;

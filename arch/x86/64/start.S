@@ -333,7 +333,15 @@ highaddr:
 
 #ifdef STACK_PROTECTOR
     /* setup stack check guard before C call */
+#ifdef __GNUC__
+#ifdef __clang__
+    leaq global_states + 0x28(%rip), %rdi
+#else
     leaq __stack_chk_guard(%rip), %rdi
+#endif
+#else
+#error stack protector unsupported under this toolchain
+#endif
     call get_rand_64
     subq  $0, %rax
     jz  0f
