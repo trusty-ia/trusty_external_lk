@@ -33,3 +33,5 @@ void local_apic_init(void);
 void lapic_eoi(void);
 void lapic_software_disable(void);
 bool send_self_ipi(uint32_t vector);
+
+void local_apic_reinit(void);
