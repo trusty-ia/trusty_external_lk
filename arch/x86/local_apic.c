@@ -269,3 +269,25 @@ bool send_self_ipi(uint32_t vector)
 
     return true;
 }
+
+/* Remap Local API instead of hard code mapping */
+void local_apic_reinit(void)
+{
+    status_t ret;
+    uint64_t lapic_base_phy_addr = read_msr(MSR_APIC_BASE);
+
+    lapic_base_phy_addr = LAPIC_BASE_ADDR(lapic_base_phy_addr);
+    ret = vmm_alloc_physical(vmm_get_kernel_aspace(),
+            "lapic",
+            4096,
+            (void **)&lapic_base_virtual_addr,
+            PAGE_SIZE_SHIFT,
+            lapic_base_phy_addr,
+            0,
+            ARCH_MMU_FLAG_UNCACHED_DEVICE);
+
+    if (ret) {
+        dprintf(CRITICAL, "Failed to allocate memory for Local APIC!\n");
+        return;
+    }
+}
