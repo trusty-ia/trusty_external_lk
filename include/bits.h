@@ -47,15 +47,26 @@
 
 static inline int bitmap_set(unsigned long *bitmap, int bit)
 {
+#if ARCH_X86_64
 	unsigned long mask = 1UL << BITMAP_BIT_IN_WORD(bit);
-	return atomic_or(&((int*)bitmap)[BITMAP_WORD(bit)], mask) & mask ? 1 : 0;
+	return atomic_or_64(&((unsigned long*)bitmap)[BITMAP_WORD(bit)], mask) & mask ? 1 : 0;
+#else
+	unsigned long mask = 1UL << BITMAP_BIT_IN_INT(bit);
+	return atomic_or(&((int *)bitmap)[BITMAP_INT(bit)], mask) & mask ? 1 : 0;
+#endif
 }
 
 static inline int bitmap_clear(unsigned long *bitmap, int bit)
 {
+#if ARCH_X86_64
 	unsigned long mask = 1UL << BITMAP_BIT_IN_WORD(bit);
 
-	return atomic_and(&((int*)bitmap)[BITMAP_WORD(bit)], ~mask) & mask ? 1:0;
+	return atomic_and_64(&((unsigned long*)bitmap)[BITMAP_WORD(bit)], ~mask) & mask ? 1:0;
+#else
+	unsigned long mask = 1UL << BITMAP_BIT_IN_INT(bit);
+
+	return atomic_and(&((int *)bitmap)[BITMAP_INT(bit)], ~mask) & mask ? 1:0;
+#endif
 }
 
 static inline int bitmap_test(unsigned long *bitmap, int bit)

@@ -51,6 +51,10 @@ static inline void arch_disable_fiqs(void)
 
 int _atomic_and(volatile int *ptr, int val);
 int _atomic_or(volatile int *ptr, int val);
+#if ARCH_X86_64
+int _atomic_and_64(volatile unsigned long *ptr, unsigned long val);
+int _atomic_or_64(volatile unsigned long *ptr, unsigned long val);
+#endif
 int _atomic_cmpxchg(volatile int *ptr, int oldval, int newval);
 
 static inline int atomic_add(volatile int *ptr, int val)
@@ -77,13 +81,13 @@ static inline int atomic_swap(volatile int *ptr, int val)
     return val;
 }
 
-#if ARCH_X86_32
 static inline int atomic_and(volatile int *ptr, int val) { return _atomic_and(ptr, val); }
 static inline int atomic_or(volatile int *ptr, int val) { return _atomic_or(ptr, val); }
+#if ARCH_X86_32
 static inline int atomic_cmpxchg(volatile int *ptr, int oldval, int newval) { return _atomic_cmpxchg(ptr, oldval, newval); }
 #elif ARCH_X86_64
-static inline int atomic_and(volatile int *ptr, long val) { return _atomic_and(ptr, val); }
-static inline int atomic_or(volatile int *ptr, long val) { return _atomic_or(ptr, val); }
+static inline int atomic_and_64(volatile unsigned long *ptr, unsigned long val) { return _atomic_and_64(ptr, val); }
+static inline int atomic_or_64(volatile unsigned long *ptr, unsigned long val) { return _atomic_or_64(ptr, val); }
 static inline int atomic_cmpxchg(volatile int *ptr, int oldval, uint64_t newval)
 {
 #if USE_GCC_ATOMICS

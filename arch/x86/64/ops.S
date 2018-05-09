@@ -39,6 +39,19 @@
 FUNCTION(_atomic_and)
     movq (%rdi), %rax
 0:
+    mov %eax, %ecx
+    and %esi, %ecx
+    lock
+    cmpxchg %ecx, (%rdi)
+    jnz 1f                  /* static prediction: branch forward not taken */
+    ret
+1:
+    jmp 0b
+
+/* int _atomic_and_64(unsigned long *ptr, unsigned long val); */
+FUNCTION(_atomic_and_64)
+    movq (%rdi), %rax
+0:
     movq %rax, %rcx
     andq %rsi, %rcx
     lock
@@ -48,9 +61,22 @@ FUNCTION(_atomic_and)
 1:
     jmp 0b
 
-
 /* int _atomic_or(int *ptr, int val); */
 FUNCTION(_atomic_or)
+
+    movq (%rdi), %rax
+0:
+    mov %eax, %ecx
+    or %esi, %ecx
+    lock
+    cmpxchg %ecx, (%rdi)
+    jnz 1f                  /* static prediction: branch forward not taken */
+    ret
+1:
+    jmp 0b
+
+/* int _atomic_or_64(unsigned long *ptr, unsigned long val); */
+FUNCTION(_atomic_or_64)
 
     movq (%rdi), %rax
 0:
