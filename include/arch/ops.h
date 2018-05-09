@@ -42,12 +42,11 @@ static int atomic_swap(volatile int *ptr, int val);
 static int atomic_add(volatile int *ptr, int val);
 
 
-#if ARCH_X86_32
 static int atomic_and(volatile int *ptr, int val);
 static int atomic_or(volatile int *ptr, int val);
-#elif ARCH_X86_64
-static int atomic_and(volatile int *ptr, long val);
-static int atomic_or(volatile int *ptr, long val);
+#if ARCH_X86_64
+static int atomic_and_64(volatile unsigned long *ptr, unsigned long val);
+static int atomic_or_64(volatile unsigned long *ptr, unsigned long val);
 int get_rand_64(uint64_t* val_ret);
 #endif
 
