@@ -46,7 +46,11 @@ endif
 # 1-> enable partial logs (by default)
 # 2-> enable full logs
 # 3+ -> not defined.
+ifeq ($(TARGET_BUILD_VARIANT),user)
+LKDEBUG ?= 0
+else
 LKDEBUG ?= 1
+endif
 
 BUILDDIR := $(BUILDROOT)/build-$(PROJECT)
 OUTBIN := $(BUILDDIR)/lk.bin
